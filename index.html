@@ -2,11 +2,11 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>Last Shinobi Battle</title>
+<title>Last Shinobi Battle v2</title>
 <style>
-  body { margin:0; font-family:sans-serif; background:#222; color:#fff; text-align:center;}
-  canvas { display:block; margin:0 auto; border:2px solid #000; background: linear-gradient(#87ceeb, #00aaff);}
-  button { margin:10px; padding:15px 20px; font-size:18px; cursor:pointer;}
+  body { margin:0; font-family:sans-serif; background:#222; color:#fff; text-align:center; overflow:hidden;}
+  canvas { display:block; margin:0 auto; border:2px solid #000; background:linear-gradient(#87ceeb,#00aaff);}
+  button { display:block; width:200px; margin:15px auto; padding:15px; font-size:18px; cursor:pointer; }
   .element { display:inline-block; padding:5px 10px; border:1px solid #fff; margin:2px; cursor:pointer; }
   .element.selected { border:2px solid yellow; }
   #accountInfo { position:absolute; top:10px; left:10px; font-weight:bold;}
@@ -15,6 +15,10 @@
 <body>
 
 <h1>Last Shinobi Standing</h1>
+
+<audio id="bgMusic" loop>
+  <source src="https://www.bensound.com/bensound-music/bensound-epic.mp3" type="audio/mpeg">
+</audio>
 
 <div id="mainMenu" style="display:block; background:#333; height:100vh; padding-top:50px;">
   <div id="accountInfo">
@@ -27,7 +31,7 @@
 
 <div id="settings" style="display:none;">
   <h2>Settings</h2>
-  <p>Volume: <input type="range" min="0" max="100" value="50" id="volumeRange"></p>
+  <p>Volume: <input type="range" min="0" max="100" value="50" id="volumeRange" oninput="setVolume(this.value)"></p>
   <button onclick="backToMenu()">Back</button>
 </div>
 
@@ -57,12 +61,11 @@
 </div>
 
 <div id="gameArea" style="display:none;">
-  <canvas id="gameCanvas" width="700" height="400"></canvas>
+  <canvas id="gameCanvas" width="800" height="500"></canvas>
   <div id="ui">
     <p id="playerHP">HP: 100</p>
     <p id="enemyHP">Enemy HP: 100</p>
     <p id="specialBar">Special: 0/100</p>
-    <p id="elementAmmo"></p>
   </div>
 </div>
 
@@ -75,7 +78,6 @@
 <script>
 // ------- Variables -------
 let selectedElements = [];
-let elementAmmo = {};
 let gameState = 'menu';
 let characters = ['blue','green','purple','orange'];
 let currentCharIndex = 0;
@@ -84,14 +86,16 @@ let currentCharIndex = 0;
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
-let player = { x:50, y:200, size:30, color:'blue', hp:100, special:0, angle:0, mouseX:0, mouseY:0 };
-let enemy = { x:620, y:200, size:30, color:'red', hp:100, elements:['Fire','Wind'], shootTimer:0, special:0, angle:0 };
+let player = { x:50, y:250, size:30, color:'blue', hp:100, special:0, angle:0, mouseX:0, mouseY:0 };
+let enemy = { x:720, y:250, size:30, color:'red', hp:100, special:0, elements:['Fire','Wind'], shootTimer:0, angle:0 };
 let bullets = [];
-let chests = [];
 let keys = {};
-const jutsuSpeed = 5;
-const jutsuDamage = 3;
-const specialDamage = 10;
+let obstacles = [];
+
+// Audio
+const bgMusic = document.getElementById('bgMusic');
+bgMusic.volume=0.5;
+bgMusic.play();
 
 // ----- ACCOUNT & TROPHIES -----
 let accountName = localStorage.getItem('accountName')||'Guest';
@@ -117,6 +121,10 @@ function backToMenu(){
   document.getElementById('endScreen').style.display='none';
   document.getElementById('gameArea').style.display='none';
   gameState='menu';
+}
+
+function setVolume(v){
+  bgMusic.volume=v/100;
 }
 
 // ------- CHARACTER SELECT -------
@@ -157,12 +165,11 @@ function startGame(){
 function initBattle(){
   document.getElementById('loadingScreen').style.display='none';
   document.getElementById('gameArea').style.display='block';
-  selectedElements.forEach(e=>elementAmmo[e]=6);
   player.color=characters[currentCharIndex];
   player.hp=100; player.special=0;
   enemy.hp=100; enemy.special=0;
   bullets=[];
-  spawnChests(5);
+  generateObstacles();
   gameState='playing';
   requestAnimationFrame(gameLoop);
 }
@@ -176,11 +183,15 @@ canvas.addEventListener('mousemove', e=>{
   player.mouseY = e.clientY - rect.top;
 });
 
-// ------- CHESTS -------
-function spawnChests(num){
-  for(let i=0;i<num;i++){
-    chests.push({x:Math.random()*(canvas.width-30),y:Math.random()*(canvas.height-30),size:20,life:300});
-  }
+// ------- OBSTACLES -------
+function generateObstacles(){
+  obstacles=[];
+  // muren
+  obstacles.push({x:200,y:100,w:20,h:300,color:'gray'});
+  obstacles.push({x:500,y:0,w:20,h:250,color:'gray'});
+  // spikes
+  obstacles.push({x:300,y:400,w:50,h:20,color:'orange'});
+  obstacles.push({x:600,y:350,w:50,h:20,color:'orange'});
 }
 
 // ------- GAME LOOP -------
@@ -191,41 +202,24 @@ function gameLoop(){
   player.angle = Math.atan2(player.mouseY-(player.y+player.size/2), player.mouseX-(player.x+player.size/2));
 
   // Player movement
-  if(keys['w'] && player.y>0) player.y-=3;
-  if(keys['s'] && player.y<canvas.height-player.size) player.y+=3;
-  if(keys['a'] && player.x>0) player.x-=3;
-  if(keys['d'] && player.x<canvas.width-player.size) player.x+=3;
+  let newX=player.x, newY=player.y;
+  if(keys['w']) newY-=3;
+  if(keys['s']) newY+=3;
+  if(keys['a']) newX-=3;
+  if(keys['d']) newX+=3;
+  if(!checkCollision(newX,newY,player.size)) {player.x=newX; player.y=newY;}
 
   // Firing
-  if(keys['e'] && elementAmmo[selectedElements[0]]>0){
-    fireBullet(selectedElements[0]);
-    elementAmmo[selectedElements[0]]-=1;
-    keys['e']=false;
-  }
-  if(keys['q'] && elementAmmo[selectedElements[1]]>0){
-    fireBullet(selectedElements[1]);
-    elementAmmo[selectedElements[1]]-=1;
-    keys['q']=false;
-  }
+  if(keys['e']) fireBullet(selectedElements[0]);
+  if(keys['q']) fireBullet(selectedElements[1]);
   // Special attack
   if(keys['e'] && keys['q'] && player.special>=100){
     bullets.push({x:player.x+player.size/2,y:player.y+player.size/2,dx:8*Math.cos(player.angle),dy:8*Math.sin(player.angle),color:'yellow',owner:'player',special:true});
     player.special=0;
   }
 
-  // Enemy AI movement + dodge bullets
-  bullets.forEach(b=>{
-    if(b.owner==='player'){
-      if(Math.abs(b.x-enemy.x)<50 && Math.abs(b.y-enemy.y)<50){
-        enemy.x += (enemy.x-b.x>0?2:-2);
-        enemy.y += (enemy.y-b.y>0?2:-2);
-      }
-    }
-  });
-  if(Math.random()<0.02) enemy.x += (Math.random()>0.5?1:-1);
-  if(Math.random()<0.02) enemy.y += (Math.random()>0.5?1:-1);
-
-  // Enemy shoot logic
+  // Enemy AI movement
+  aiMove();
   enemy.shootTimer++;
   if(enemy.shootTimer>60){
     enemy.shootTimer=0;
@@ -236,54 +230,29 @@ function gameLoop(){
   // Bullets update
   bullets.forEach((b,i)=>{
     b.x+=b.dx; b.y+=b.dy;
-    // Player hit
-    if(b.owner==='enemy' && b.x>player.x && b.x<player.x+player.size && b.y>player.y && b.y<player.y+player.size){
-      player.hp -= b.special?specialDamage:jutsuDamage;
-      bullets.splice(i,1);
-    }
-    // Enemy hit
-    if(b.owner==='player' && b.x>enemy.x && b.x<enemy.x+enemy.size && b.y>enemy.y && b.y<enemy.y+enemy.size){
-      enemy.hp -= b.special?specialDamage:jutsuDamage;
-      if(!b.special) player.special+=5;
-      bullets.splice(i,1);
-    }
-    // Out of canvas
-    if(b.x<0 || b.x>canvas.width || b.y<0 || b.y>canvas.height) bullets.splice(i,1);
-  });
-
-  // Chests
-  chests.forEach((c,i)=>{
-    c.life--;
-    if(player.x+player.size>c.x && player.x<c.x+c.size && player.y+player.size>c.y && player.y<c.y+c.size){
-      selectedElements.forEach(e=>elementAmmo[e]=6);
-      chests.splice(i,1);
-    }
-    if(c.life<=0) chests.splice(i,1);
+    if(b.x<0||b.x>canvas.width||b.y<0||b.y>canvas.height) bullets.splice(i,1);
+    if(b.owner==='enemy' && checkHit(b,player)){ player.hp-=b.special?10:3; bullets.splice(i,1);}
+    if(b.owner==='player' && checkHit(b,enemy)){ enemy.hp-=b.special?10:3; if(!b.special) player.special+=5; bullets.splice(i,1);}
   });
 
   // Draw
   ctx.clearRect(0,0,canvas.width,canvas.height);
-  // Chests
-  chests.forEach(c=>{ ctx.fillStyle='gold'; ctx.fillRect(c.x,c.y,c.size,c.size); });
+
+  // Obstacles
+  obstacles.forEach(o=>{ ctx.fillStyle=o.color; ctx.fillRect(o.x,o.y,o.w,o.h); });
+
   // Player
   ctx.save(); ctx.translate(player.x+player.size/2,player.y+player.size/2); ctx.rotate(player.angle);
   ctx.fillStyle=player.color; ctx.fillRect(-player.size/2,-player.size/2,player.size,player.size); ctx.restore();
   // Enemy
   ctx.fillStyle=enemy.color; ctx.fillRect(enemy.x,enemy.y,enemy.size,enemy.size);
   // Bullets
-  bullets.forEach(b=>{
-    ctx.beginPath();
-    ctx.arc(b.x,b.y,b.special?12:8,0,Math.PI*2);
-    ctx.fillStyle=b.color; ctx.fill();
-  });
+  bullets.forEach(b=>{ ctx.beginPath(); ctx.arc(b.x,b.y,b.special?12:8,0,Math.PI*2); ctx.fillStyle=b.color; ctx.fill(); });
 
   // UI
   document.getElementById('playerHP').innerText=`HP: ${player.hp}`;
   document.getElementById('enemyHP').innerText=`Enemy HP: ${enemy.hp}`;
   document.getElementById('specialBar').innerText=`Special: ${player.special}/100`;
-  let ammoText='';
-  selectedElements.forEach(e=> ammoText+=`${e}: ${elementAmmo[e]}/6  `);
-  document.getElementById('elementAmmo').innerText=ammoText;
 
   // Win/Lose
   if(player.hp<=0 || enemy.hp<=0){
@@ -295,28 +264,49 @@ function gameLoop(){
   } else requestAnimationFrame(gameLoop);
 }
 
-// ------- FIRE BULLET -------
+// ------- FUNCTIONS -------
 function fireBullet(element){
   let color = element==='Fire'?'orange':element==='Water'?'cyan':element==='Wind'?'white':element==='Earth'?'brown':'yellow';
-  bullets.push({x:player.x+player.size/2, y:player.y+player.size/2, dx:jutsuSpeed*Math.cos(player.angle), dy:jutsuSpeed*Math.sin(player.angle), color:color, owner:'player', special:false});
+  bullets.push({x:player.x+player.size/2,y:player.y+player.size/2,dx:5*Math.cos(player.angle),dy:5*Math.sin(player.angle),color:color,owner:'player',special:false});
+}
+
+function checkHit(b,target){ return b.x>target.x && b.x<target.x+target.size && b.y>target.y && b.y<target.y+target.size; }
+
+function checkCollision(x,y,size){
+  return obstacles.some(o=>{
+    return x<size+o.x && x+size>o.x && y<size+o.y && y+size>o.y;
+  });
+}
+
+// ------- AI Movement -------
+function aiMove(){
+  // Simpel AI: beweeg naar speler met obstakels vermijden
+  let dx = player.x - enemy.x;
+  let dy = player.y - enemy.y;
+  let dist = Math.hypot(dx,dy);
+  if(dist>0){
+    let nx = enemy.x + 2*(dx/dist);
+    let ny = enemy.y + 2*(dy/dist);
+    if(!checkCollision(nx,enemy.y,enemy.size)) enemy.x=nx;
+    if(!checkCollision(enemy.x,ny,enemy.size)) enemy.y=ny;
+  }
 }
 
 // ------- REMATCH -------
 function rematch(){
-  bullets=[]; chests=[];
-  spawnChests(5);
-  player={ x:50, y:200, size:30, color:characters[currentCharIndex], hp:100, special:0, angle:0, mouseX:0, mouseY:0 };
-  enemy={ x:620, y:200, size:30, color:'red', hp:100, shootTimer:0, special:0, elements:['Fire','Wind'], angle:0 };
-  selectedElements.forEach(e=>elementAmmo[e]=6);
+  bullets=[];
+  player={ x:50, y:250, size:30, color:characters[currentCharIndex], hp:100, special:0, angle:0, mouseX:0, mouseY:0 };
+  enemy={ x:720, y:250, size:30, color:'red', hp:100, shootTimer:0, special:0, elements:['Fire','Wind'], angle:0 };
   document.getElementById('endScreen').style.display='none';
   document.getElementById('gameArea').style.display='block';
   gameState='playing';
   requestAnimationFrame(gameLoop);
 }
 </script>
-
 </body>
 </html>
+
+
 
 
 
