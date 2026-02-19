@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <title>Last Shinobi Standing</title>
+  <style>
+    body { text-align: center; font-family: sans-serif; margin: 0; padding: 20px; background-color: #f0f0f0; }
+    #game { width: 100%; height: 70vh; border: 2px solid #000; margin-top: 20px; background-color: #fff; display: flex; align-items: center; justify-content: center;}
+    button { padding: 10px 20px; font-size: 18px; margin-top: 20px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>Last Shinobi Standing</h1>
+  <p>Klik op de knop om te beginnen!</p>
+  <button onclick="startGame()">Start Game</button>
+  <div id="game">
+    <p>Game placeholder…</p>
+  </div>
+
+  <script>
+    function startGame() {
+      document.getElementById('game').innerHTML = "<p>Game loading… (hier komt straks je echte game)</p>";
+    }
+  </script>
+</body>
+</html>
