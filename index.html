@@ -5,42 +5,61 @@
   <title>Last Shinobi Standing</title>
   <style>
     body { text-align: center; font-family: sans-serif; margin: 0; padding: 20px; background-color: #f0f0f0; }
-    #game { width: 100%; height: 70vh; border: 2px solid #000; margin-top: 20px; background-color: #fff; display: flex; align-items: center; justify-content: center;}
-    button { padding: 10px 20px; font-size: 18px; margin-top: 20px; cursor: pointer; }
+    #game { width: 100%; height: 70vh; border: 2px solid #000; margin-top: 20px; background-color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    button { padding: 10px 20px; font-size: 18px; margin: 5px; cursor: pointer; }
   </style>
 </head>
 <body>
   <h1>Last Shinobi Standing</h1>
-  <p>Klik op de knop om te beginnen!</p>
-  <div id="game">
   <p>Kies je jutsu om te vechten!</p>
-  <button onclick="chooseJutsu('Fireball 🔥')">Fireball 🔥</button>
-  <button onclick="chooseJutsu('Water Wave 🌊')">Water Wave 🌊</button>
-  <button onclick="chooseJutsu('Lightning ⚡')">Lightning ⚡</button>
-  <button onclick="chooseJutsu('Earth Quake 🌍')">Earth Quake 🌍</button>
-</div>
 
+  <div id="game">
+    <button onclick="chooseJutsu('Fireball 🔥')">Fireball 🔥</button>
+    <button onclick="chooseJutsu('Water Wave 🌊')">Water Wave 🌊</button>
+    <button onclick="chooseJutsu('Lightning ⚡')">Lightning ⚡</button>
+    <button onclick="chooseJutsu('Earth Quake 🌍')">Earth Quake 🌍</button>
+  </div>
 
   <script>
-  // Jutsu opties
-  const jutsus = ["Fireball 🔥", "Water Wave 🌊", "Lightning ⚡", "Earth Quake 🌍"];
+    const jutsus = ["Fireball 🔥", "Water Wave 🌊", "Lightning ⚡", "Earth Quake 🌍"];
+    let playerScore = 0;
+    let enemyScore = 0;
 
-  function startGame() {
-    // Kies een random jutsu voor de speler
-    const playerJutsu = jutsus[Math.floor(Math.random() * jutsus.length)];
-    // Kies een random jutsu voor de tegenstander
-    const enemyJutsu = jutsus[Math.floor(Math.random() * jutsus.length)];
+    function chooseJutsu(playerJutsu) {
+      const enemyJutsu = jutsus[Math.floor(Math.random() * jutsus.length)];
 
-    // Toon het resultaat in de game div
-    document.getElementById('game').innerHTML = `
-      <p>Jij kiest: ${playerJutsu}</p>
-      <p>Tegenstander kiest: ${enemyJutsu}</p>
-      <p>Go fight! 💥</p>
-    `;
-  }
-</script>
+      let result = "";
+      if (playerJutsu === enemyJutsu) {
+        result = "Gelijkspel!";
+      } else if (
+        (playerJutsu === "Fireball 🔥" && enemyJutsu === "Earth Quake 🌍") ||
+        (playerJutsu === "Water Wave 🌊" && enemyJutsu === "Fireball 🔥") ||
+        (playerJutsu === "Lightning ⚡" && enemyJutsu === "Water Wave 🌊") ||
+        (playerJutsu === "Earth Quake 🌍" && enemyJutsu === "Lightning ⚡")
+      ) {
+        result = "Jij wint!";
+        playerScore++;
+      } else {
+        result = "Tegenstander wint!";
+        enemyScore++;
+      }
+
+      document.getElementById('game').innerHTML = `
+        <p>Jij kiest: ${playerJutsu}</p>
+        <p>Tegenstander kiest: ${enemyJutsu}</p>
+        <p>${result}</p>
+        <p>Score: Jij ${playerScore} - ${enemyScore} Tegenstander</p>
+        <p>Kies opnieuw je jutsu!</p>
+        <button onclick="chooseJutsu('Fireball 🔥')">Fireball 🔥</button>
+        <button onclick="chooseJutsu('Water Wave 🌊')">Water Wave 🌊</button>
+        <button onclick="chooseJutsu('Lightning ⚡')">Lightning ⚡</button>
+        <button onclick="chooseJutsu('Earth Quake 🌍')">Earth Quake 🌍</button>
+      `;
+    }
+  </script>
 
 </body>
-
 </html>
+
+
 
