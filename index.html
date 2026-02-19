@@ -1,65 +1,85 @@
 <!DOCTYPE html>
 <html lang="nl">
 <head>
-  <meta charset="UTF-8">
-  <title>Last Shinobi Standing</title>
-  <style>
-    body { text-align: center; font-family: sans-serif; margin: 0; padding: 20px; background-color: #f0f0f0; }
-    #game { width: 100%; height: 70vh; border: 2px solid #000; margin-top: 20px; background-color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-    button { padding: 10px 20px; font-size: 18px; margin: 5px; cursor: pointer; }
-  </style>
+<meta charset="UTF-8">
+<title>Last Shinobi Arena</title>
+<style>
+  body { text-align: center; font-family: sans-serif; margin: 0; padding: 0; background-color: #f0f0f0; }
+  canvas { background-color: #a0d8f0; display: block; margin: 20px auto; border: 2px solid #000; }
+</style>
 </head>
 <body>
-  <h1>Last Shinobi Standing</h1>
-  <p>Kies je jutsu om te vechten!</p>
+<h1>Last Shinobi Arena</h1>
+<p>Gebruik WASD om te bewegen en spatie om jutsu te gebruiken!</p>
+<canvas id="gameCanvas" width="600" height="400"></canvas>
 
-  <div id="game">
-    <button onclick="chooseJutsu('Fireball 🔥')">Fireball 🔥</button>
-    <button onclick="chooseJutsu('Water Wave 🌊')">Water Wave 🌊</button>
-    <button onclick="chooseJutsu('Lightning ⚡')">Lightning ⚡</button>
-    <button onclick="chooseJutsu('Earth Quake 🌍')">Earth Quake 🌍</button>
-  </div>
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
 
-  <script>
-    const jutsus = ["Fireball 🔥", "Water Wave 🌊", "Lightning ⚡", "Earth Quake 🌍"];
-    let playerScore = 0;
-    let enemyScore = 0;
+const player = { x: 50, y: 50, size: 30, color: "blue" };
+const enemy = { x: 500, y: 300, size: 30, color: "red" };
 
-    function chooseJutsu(playerJutsu) {
-      const enemyJutsu = jutsus[Math.floor(Math.random() * jutsus.length)];
+const keys = {};
 
-      let result = "";
-      if (playerJutsu === enemyJutsu) {
-        result = "Gelijkspel!";
-      } else if (
-        (playerJutsu === "Fireball 🔥" && enemyJutsu === "Earth Quake 🌍") ||
-        (playerJutsu === "Water Wave 🌊" && enemyJutsu === "Fireball 🔥") ||
-        (playerJutsu === "Lightning ⚡" && enemyJutsu === "Water Wave 🌊") ||
-        (playerJutsu === "Earth Quake 🌍" && enemyJutsu === "Lightning ⚡")
-      ) {
-        result = "Jij wint!";
-        playerScore++;
-      } else {
-        result = "Tegenstander wint!";
-        enemyScore++;
-      }
+// Event listeners voor toetsen
+window.addEventListener("keydown", (e) => { keys[e.key] = true; });
+window.addEventListener("keyup", (e) => { keys[e.key] = false; });
 
-      document.getElementById('game').innerHTML = `
-        <p>Jij kiest: ${playerJutsu}</p>
-        <p>Tegenstander kiest: ${enemyJutsu}</p>
-        <p>${result}</p>
-        <p>Score: Jij ${playerScore} - ${enemyScore} Tegenstander</p>
-        <p>Kies opnieuw je jutsu!</p>
-        <button onclick="chooseJutsu('Fireball 🔥')">Fireball 🔥</button>
-        <button onclick="chooseJutsu('Water Wave 🌊')">Water Wave 🌊</button>
-        <button onclick="chooseJutsu('Lightning ⚡')">Lightning ⚡</button>
-        <button onclick="chooseJutsu('Earth Quake 🌍')">Earth Quake 🌍</button>
-      `;
-    }
-  </script>
+// Jutsu array (visueel effect)
+const jutsus = [
+  { name: "Fireball 🔥", color: "orange", dx: 5 },
+  { name: "Water Wave 🌊", color: "cyan", dx: 4 }
+];
+let activeJutsus = [];
 
+// Game loop
+function gameLoop() {
+  // Beweging speler
+  if (keys["w"] && player.y > 0) player.y -= 3;
+  if (keys["s"] && player.y < canvas.height - player.size) player.y += 3;
+  if (keys["a"] && player.x > 0) player.x -= 3;
+  if (keys["d"] && player.x < canvas.width - player.size) player.x += 3;
+
+  // Spatie = schiet Fireball
+  if (keys[" "]) {
+    activeJutsus.push({ x: player.x + player.size, y: player.y + player.size/2, color: "orange" });
+    keys[" "] = false; // zodat het niet continu schiet
+  }
+
+  // Clear canvas
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Teken speler
+  ctx.fillStyle = player.color;
+  ctx.fillRect(player.x, player.y, player.size, player.size);
+
+  // Teken vijand
+  ctx.fillStyle = enemy.color;
+  ctx.fillRect(enemy.x, enemy.y, enemy.size, enemy.size);
+
+  // Teken actieve jutsus
+  activeJutsus.forEach((j, index) => {
+    ctx.fillStyle = j.color;
+    ctx.beginPath();
+    ctx.arc(j.x, j.y, 8, 0, Math.PI*2);
+    ctx.fill();
+    j.x += 5; // Beweging naar rechts
+
+    // Verwijder als buiten canvas
+    if (j.x > canvas.width) activeJutsus.splice(index, 1);
+  });
+
+  requestAnimationFrame(gameLoop);
+}
+
+// Start game loop
+gameLoop();
+</script>
 </body>
 </html>
+
+
 
 
 
