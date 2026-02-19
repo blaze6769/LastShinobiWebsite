@@ -1,295 +1,136 @@
 <!DOCTYPE html>
-<html lang="nl">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Last Shinobi Standing</title>
+<title>Elemental Arena Battle</title>
 <style>
-body { margin:0; font-family:sans-serif; background:#111; color:#fff; text-align:center; overflow:hidden;}
-canvas { display:block; margin:0 auto; background:linear-gradient(#222,#555);}
-button { display:block; margin:10px auto; padding:12px; width:200px; font-size:16px; cursor:pointer;}
-.element { display:inline-block; margin:5px; padding:5px 10px; border:1px solid #fff; cursor:pointer; }
-.element.selected { border:2px solid yellow; }
-#accountInfo { position:absolute; top:10px; left:10px; font-weight:bold;}
+body{margin:0; background:#111; color:#fff; font-family:sans-serif; text-align:center; overflow:hidden;}
+canvas{display:block; margin:0 auto; background:linear-gradient(#222,#444);}
+#scoreboard{position:absolute; top:10px; left:10px;}
+button{padding:10px 20px; margin:10px; cursor:pointer;}
 </style>
 </head>
 <body>
-
-<h1>Last Shinobi Standing</h1>
-
-<audio id="bgMusic" loop>
-<source src="https://www.bensound.com/bensound-music/bensound-epic.mp3" type="audio/mpeg">
-</audio>
-
-<!-- MAIN MENU -->
-<div id="mainMenu">
-  <div id="accountInfo">
-    <span id="accountName">Guest</span> 🏆 <span id="trophies">0</span>
-  </div>
-  <button onclick="startSingleplayer()">Singleplayer</button>
-  <button onclick="alert('Multiplayer coming soon!')">Multiplayer</button>
-  <button onclick="openSettings()">Settings</button>
-</div>
-
-<!-- SETTINGS -->
-<div id="settings" style="display:none;">
-<h2>Settings</h2>
-<p>Volume: <input type="range" min="0" max="100" value="50" id="volumeRange" oninput="setVolume(this.value)"></p>
-<button onclick="backToMenu()">Back</button>
-</div>
-
-<!-- CHARACTER & JUTSU SELECT -->
-<div id="characterSelect" style="display:none;">
-<h2>Select Character & Elements</h2>
-<div>
-<button onclick="prevCharacter()">◀</button>
-<div id="characterBox" style="width:50px;height:50px;background:blue;display:inline-block;"></div>
-<button onclick="nextCharacter()">▶</button>
-</div>
-
-<h3>Choose 4 Elements</h3>
-<div id="elementMenu">
-  <div class="element" title="Fire: Damage 3" onclick="selectElement('Fire')">Fire</div>
-  <div class="element" title="Water: Damage 3" onclick="selectElement('Water')">Water</div>
-  <div class="element" title="Wind: Damage 3" onclick="selectElement('Wind')">Wind</div>
-  <div class="element" title="Earth: Damage 3" onclick="selectElement('Earth')">Earth</div>
-  <div class="element" title="Lightning: Damage 3" onclick="selectElement('Lightning')">Lightning</div>
-</div>
-<p id="elementDesc">Select 2 elements for battle</p>
-<button onclick="startGame()">Start Battle</button>
-</div>
-
-<!-- LOADING SCREEN -->
-<div id="loadingScreen" style="display:none;">
-<h2>Loading...</h2>
-<div style="width:300px;height:20px;border:1px solid #fff;margin:0 auto;">
-  <div id="loadingBar" style="height:100%;width:0%;background:green;"></div>
-</div>
-</div>
-
-<!-- GAME AREA -->
-<div id="gameArea" style="display:none;">
+<h1>Elemental Arena Battle</h1>
+<div id="scoreboard">Score: <span id="score">0</span></div>
+<button onclick="startGame()">Start Game</button>
 <canvas id="gameCanvas" width="800" height="500"></canvas>
-<div id="ui">
-<p id="playerHP">HP: 100</p>
-<p id="enemyHP">Enemy HP: 100</p>
-<p id="specialBar">Special: 0/100</p>
-</div>
-</div>
-
-<!-- END SCREEN -->
-<div id="endScreen" style="display:none;">
-<h2 id="endMessage"></h2>
-<button onclick="rematch()">Rematch</button>
-<button onclick="backToMenu()">Menu</button>
-</div>
-
 <script>
-// ---------- GAME VARIABLES ----------
-let selectedElements = [];
-let playerElements = [];
-let gameState='menu';
-let characters=['blue','green','purple','orange'];
-let currentCharIndex=0;
+const canvas=document.getElementById('gameCanvas');
+const ctx=canvas.getContext('2d');
 
-const canvas = document.getElementById("gameCanvas");
-const ctx = canvas.getContext("2d");
+let player={x:400,y:250,size:30,color:'blue',hp:100,score:0,angle:0};
+let bullets=[],enemies=[],elements=['Fire','Water','Wind','Earth'],keys={},mouse={x:400,y:250};
 
-let player={x:50,y:250,size:30,color:'blue',hp:100,special:0,angle:0,mouseX:0,mouseY:0};
-let enemy={x:720,y:250,size:30,color:'red',hp:100,special:0,angle:0,shootTimer:0,elements:['Fire','Wind']};
-let bullets=[];
-let keys={};
-let obstacles=[];
+// INPUT
+window.addEventListener('keydown',e=>keys[e.key.toLowerCase()]=true);
+window.addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+canvas.addEventListener('mousemove',e=>{
+  const rect=canvas.getBoundingClientRect();
+  mouse.x=e.clientX-rect.left;
+  mouse.y=e.clientY-rect.top;
+});
 
-// AUDIO
-const bgMusic=document.getElementById('bgMusic');
-bgMusic.volume=0.5;
-bgMusic.play();
-
-// ACCOUNT/TROPHIES
-let accountName=localStorage.getItem('accountName')||'Guest';
-let trophies=parseInt(localStorage.getItem('trophies')||0);
-document.getElementById('accountName').innerText=accountName;
-document.getElementById('trophies').innerText=trophies;
-
-// ---------- MENU ----------
-function startSingleplayer(){
-document.getElementById('mainMenu').style.display='none';
-document.getElementById('characterSelect').style.display='block';
-}
-
-function openSettings(){
-document.getElementById('mainMenu').style.display='none';
-document.getElementById('settings').style.display='block';
-}
-
-function backToMenu(){
-document.getElementById('mainMenu').style.display='block';
-document.getElementById('settings').style.display='none';
-document.getElementById('characterSelect').style.display='none';
-document.getElementById('endScreen').style.display='none';
-document.getElementById('gameArea').style.display='none';
-gameState='menu';
-}
-
-function setVolume(v){ bgMusic.volume=v/100; }
-
-// ---------- CHARACTER SELECT ----------
-function prevCharacter(){ currentCharIndex=(currentCharIndex-1+characters.length)%characters.length; updateCharacterBox(); }
-function nextCharacter(){ currentCharIndex=(currentCharIndex+1)%characters.length; updateCharacterBox(); }
-function updateCharacterBox(){ document.getElementById('characterBox').style.background=characters[currentCharIndex]; }
-
-function selectElement(name){
-  if(selectedElements.includes(name)) selectedElements = selectedElements.filter(e=>e!==name);
-  else if(selectedElements.length<2) selectedElements.push(name);
-  updateElementMenu();
-}
-
-function updateElementMenu(){
-  const elems=document.querySelectorAll('.element');
-  elems.forEach(e=>{
-    if(selectedElements.includes(e.innerText)) e.classList.add('selected');
-    else e.classList.remove('selected');
-  });
-  if(selectedElements.length>0) document.getElementById('elementDesc').innerText=`Selected for battle: ${selectedElements.join(' + ')}`;
-}
-
-// ---------- START GAME ----------
+// START GAME
 function startGame(){
-  if(selectedElements.length<2){ alert('Select 2 elements!'); return; }
-  playerElements = [...selectedElements];
-  document.getElementById('characterSelect').style.display='none';
-  document.getElementById('loadingScreen').style.display='block';
-  let bar=document.getElementById('loadingBar');
-  let width=0;
-  let interval=setInterval(()=>{
-    width+=1; bar.style.width=width+'%';
-    if(width>=100){ clearInterval(interval); initBattle(); }
-  },30);
+  player.hp=100; player.score=0; bullets=[]; enemies=[];
+  spawnEnemies(5);
+  requestAnimationFrame(gameLoop);
 }
 
-// ---------- BATTLE INIT ----------
-function initBattle(){
-document.getElementById('loadingScreen').style.display='none';
-document.getElementById('gameArea').style.display='block';
-player.color=characters[currentCharIndex]; player.hp=100; player.special=0;
-enemy.hp=100; enemy.special=0; bullets=[]; generateObstacles();
-gameState='playing'; requestAnimationFrame(gameLoop);
+// SPAWN ENEMIES
+function spawnEnemies(n){
+  for(let i=0;i<n;i++){
+    enemies.push({
+      x:Math.random()*700+50,
+      y:Math.random()*400+50,
+      size:25,
+      color:'red',
+      hp:30,
+      angle:0,
+      shootTimer:0
+    });
+  }
 }
 
-// ---------- INPUT ----------
-window.addEventListener('keydown', e=>keys[e.key.toLowerCase()]=true);
-window.addEventListener('keyup', e=>keys[e.key.toLowerCase()]=false);
-canvas.addEventListener('mousemove', e=>{
-const rect=canvas.getBoundingClientRect();
-player.mouseX=e.clientX-rect.left; player.mouseY=e.clientY-rect.top;
-});
-
-// ---------- OBSTACLES ----------
-function generateObstacles(){
-obstacles=[];
-obstacles.push({x:200,y:100,w:20,h:300,color:'gray'});
-obstacles.push({x:500,y:0,w:20,h:250,color:'gray'});
-obstacles.push({x:300,y:400,w:50,h:20,color:'orange'});
-obstacles.push({x:600,y:350,w:50,h:20,color:'orange'});
-}
-
-// ---------- GAME LOOP ----------
+// GAME LOOP
 function gameLoop(){
-if(gameState!=='playing') return;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
 
-// Player rotation
-player.angle=Math.atan2(player.mouseY-(player.y+player.size/2), player.mouseX-(player.x+player.size/2));
+  // PLAYER ROTATION
+  player.angle=Math.atan2(mouse.y-player.y,mouse.x-player.x);
 
-// Player movement
-let newX=player.x,newY=player.y;
-if(keys['w']) newY-=3; if(keys['s']) newY+=3; if(keys['a']) newX-=3; if(keys['d']) newX+=3;
-if(!checkCollision(newX,newY,player.size)) {player.x=newX; player.y=newY;}
+  // PLAYER MOVEMENT
+  let nx=player.x,ny=player.y;
+  if(keys['w']) ny-=3; if(keys['s']) ny+=3; if(keys['a']) nx-=3; if(keys['d']) nx+=3;
+  if(nx>0&&nx<canvas.width-player.size) player.x=nx;
+  if(ny>0&&ny<canvas.height-player.size) player.y=ny;
 
-// Firing
-if(keys['e']) fireBullet(playerElements[0]);
-if(keys['q']) fireBullet(playerElements[1]);
-if(keys['e'] && keys['q'] && player.special>=100){
-  bullets.push({x:player.x+player.size/2,y:player.y+player.size/2,dx:8*Math.cos(player.angle),dy:8*Math.sin(player.angle),color:'yellow',owner:'player',special:true});
-  player.special=0;
+  // PLAYER SHOOT
+  if(keys['e']) fireBullet('Fire');
+  if(keys['q']) fireBullet('Water');
+  if(keys['e']&&keys['q']) fireBullet('Steam',true);
+
+  // DRAW PLAYER
+  ctx.save(); ctx.translate(player.x+player.size/2,player.y+player.size/2);
+  ctx.rotate(player.angle);
+  ctx.fillStyle=player.color; ctx.fillRect(-player.size/2,-player.size/2,player.size,player.size);
+  ctx.restore();
+
+  // BULLETS
+  bullets.forEach((b,i)=>{
+    b.x+=b.dx; b.y+=b.dy;
+    ctx.beginPath();
+    ctx.arc(b.x,b.y,b.special?10:5,0,Math.PI*2);
+    ctx.fillStyle=b.color; ctx.fill();
+
+    // COLLISION WITH ENEMIES
+    enemies.forEach((en,j)=>{
+      if(b.x>en.x && b.x<en.x+en.size && b.y>en.y && b.y<en.y+en.size && b.owner==='player'){
+        en.hp-=b.special?10:3;
+        if(en.hp<=0){ enemies.splice(j,1); player.score+=10; document.getElementById('score').innerText=player.score; }
+        bullets.splice(i,1);
+      }
+    });
+    if(b.x<0||b.x>canvas.width||b.y<0||b.y>canvas.height) bullets.splice(i,1);
+  });
+
+  // ENEMIES
+  enemies.forEach(en=>{
+    // MOVE TOWARDS PLAYER
+    let dx=player.x-en.x, dy=player.y-en.y, dist=Math.hypot(dx,dy);
+    if(dist>0){ en.x+=dx/dist*1.5; en.y+=dy/dist*1.5; }
+
+    // SHOOT
+    en.shootTimer++;
+    if(en.shootTimer>60){
+      en.shootTimer=0;
+      let angle=Math.atan2(player.y-en.y,player.x-en.x);
+      bullets.push({x:en.x+en.size/2,y:en.y+en.size/2,dx:4*Math.cos(angle),dy:4*Math.sin(angle),color:'orange',owner:'enemy',special:false});
+    }
+
+    // DRAW ENEMY
+    ctx.fillStyle=en.color; ctx.fillRect(en.x,en.y,en.size,en.size);
+  });
+
+  // PLAYER HP BAR
+  ctx.fillStyle='red'; ctx.fillRect(20,20,player.hp*2,20);
+  ctx.strokeStyle='white'; ctx.strokeRect(20,20,200,20);
+
+  if(player.hp<=0){ alert('Game Over! Score: '+player.score); return; }
+  requestAnimationFrame(gameLoop);
 }
 
-// Enemy AI
-aiMove();
-enemy.shootTimer++;
-if(enemy.shootTimer>50){
-  enemy.shootTimer=0;
-  let idx=Math.floor(Math.random()*enemy.elements.length);
-  let angle=Math.atan2(player.y-enemy.y,player.x-enemy.x);
-  bullets.push({x:enemy.x+enemy.size/2,y:enemy.y+enemy.size/2,dx:4*Math.cos(angle),dy:4*Math.sin(angle),color:enemy.elements[idx]==='Fire'?'orange':'cyan',owner:'enemy',special:false});
-}
-
-// Bullets update
-bullets.forEach((b,i)=>{
-  b.x+=b.dx; b.y+=b.dy;
-  if(b.x<0||b.x>canvas.width||b.y<0||b.y>canvas.height) bullets.splice(i,1);
-  if(b.owner==='enemy' && checkHit(b,player)){ player.hp-=b.special?10:3; bullets.splice(i,1);}
-  if(b.owner==='player' && checkHit(b,enemy)){ enemy.hp-=b.special?10:3; if(!b.special) player.special+=5; bullets.splice(i,1);}
-});
-
-// Draw
-ctx.clearRect(0,0,canvas.width,canvas.height);
-obstacles.forEach(o=>{ ctx.fillStyle=o.color; ctx.fillRect(o.x,o.y,o.w,o.h); });
-
-// Player
-ctx.save(); ctx.translate(player.x+player.size/2,player.y+player.size/2); ctx.rotate(player.angle);
-ctx.fillStyle=player.color; ctx.fillRect(-player.size/2,-player.size/2,player.size,player.size); ctx.restore();
-// Enemy
-ctx.fillStyle=enemy.color; ctx.fillRect(enemy.x,enemy.y,enemy.size,enemy.size);
-// Bullets
-bullets.forEach(b=>{ ctx.beginPath(); ctx.arc(b.x,b.y,b.special?12:8,0,Math.PI*2); ctx.fillStyle=b.color; ctx.fill(); });
-
-// UI
-document.getElementById('playerHP').innerText=`HP: ${player.hp}`;
-document.getElementById('enemyHP').innerText=`Enemy HP: ${enemy.hp}`;
-document.getElementById('specialBar').innerText=`Special: ${player.special}/100`;
-
-// Win/Lose
-if(player.hp<=0 || enemy.hp<=0){
-  gameState='end';
-  document.getElementById('gameArea').style.display='none';
-  document.getElementById('endScreen').style.display='block';
-  document.getElementById('endMessage').innerText=player.hp>0?"You won! You earned 8 trophies":"Better luck next time";
-  if(player.hp>0){ trophies+=8; localStorage.setItem('trophies',trophies); document.getElementById('trophies').innerText=trophies; }
-}else requestAnimationFrame(gameLoop);
-}
-
-// ---------- FUNCTIONS ----------
-function fireBullet(element){
-let color=element==='Fire'?'orange':element==='Water'?'cyan':element==='Wind'?'white':element==='Earth'?'brown':'yellow';
-bullets.push({x:player.x+player.size/2,y:player.y+player.size/2,dx:5*Math.cos(player.angle),dy:5*Math.sin(player.angle),color:color,owner:'player',special:false});
-}
-
-function checkHit(b,target){ return b.x>target.x && b.x<target.x+target.size && b.y>target.y && b.y<target.y+target.size; }
-
-function checkCollision(x,y,size){ return obstacles.some(o=> x<size+o.x && x+size>o.x && y<size+o.y && y+size>o.y); }
-
-// AI Movement
-function aiMove(){
-let dx=player.x-enemy.x; let dy=player.y-enemy.y; let dist=Math.hypot(dx,dy);
-if(dist>0){
-  let nx=enemy.x + 2*(dx/dist); let ny=enemy.y + 2*(dy/dist);
-  if(!checkCollision(nx,enemy.y,enemy.size) && nx>0 && nx<canvas.width-enemy.size) enemy.x=nx;
-  if(!checkCollision(enemy.x,ny,enemy.size) && ny>0 && ny<canvas.height-enemy.size) enemy.y=ny;
-}
-}
-
-// ---------- REMATCH ----------
-function rematch(){
-bullets=[]; player={ x:50, y:250, size:30, color:characters[currentCharIndex], hp:100, special:0, angle:0, mouseX:0, mouseY:0 };
-enemy={ x:720, y:250, size:30, color:'red', hp:100, special:0, shootTimer:0, elements:['Fire','Wind'], angle:0 };
-document.getElementById('endScreen').style.display='none';
-document.getElementById('gameArea').style.display='block';
-gameState='playing'; requestAnimationFrame(gameLoop);
+// FIRE BULLET
+function fireBullet(type,special=false){
+  let color=type==='Fire'?'orange':type==='Water'?'cyan':'yellow';
+  bullets.push({x:player.x+player.size/2,y:player.y+player.size/2,dx:5*Math.cos(player.angle),dy:5*Math.sin(player.angle),color:color,owner:'player',special:special});
 }
 </script>
-
 </body>
 </html>
+
+
 
 
 
