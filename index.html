@@ -2,43 +2,47 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Elemental Arena Battle</title>
+<title>Element Clash Arena</title>
 <style>
-body{margin:0; background:#111; color:#fff; font-family:sans-serif; text-align:center; overflow:hidden;}
-canvas{display:block; margin:0 auto; background:linear-gradient(#222,#444);}
-#scoreboard{position:absolute; top:10px; left:10px;}
-button{padding:10px 20px; margin:10px; cursor:pointer;}
+body { margin:0; font-family:sans-serif; background:#111; overflow:hidden; color:#fff; }
+canvas { display:block; margin:0 auto; background:linear-gradient(#222,#444); }
+#ui { position:absolute; top:10px; left:10px; }
+#ui p { margin:5px; font-weight:bold; }
 </style>
 </head>
 <body>
-<h1>Elemental Arena Battle</h1>
-<div id="scoreboard">Score: <span id="score">0</span></div>
-<button onclick="startGame()">Start Game</button>
 <canvas id="gameCanvas" width="800" height="500"></canvas>
+<div id="ui">
+<p id="hp">HP: 100</p>
+<p id="special">Special: 0/100</p>
+<p id="score">Score: 0</p>
+</div>
 <script>
+// --------- GAME VARIABLES ---------
 const canvas=document.getElementById('gameCanvas');
 const ctx=canvas.getContext('2d');
 
-let player={x:400,y:250,size:30,color:'blue',hp:100,score:0,angle:0};
-let bullets=[],enemies=[],elements=['Fire','Water','Wind','Earth'],keys={},mouse={x:400,y:250};
+let player={x:400,y:250,size:30,color:'blue',hp:100,special:0,score:0,angle:0};
+let bullets=[],enemies=[],obstacles=[],keys={},mouse={x:400,y:250};
 
 // INPUT
-window.addEventListener('keydown',e=>keys[e.key.toLowerCase()]=true);
-window.addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
-canvas.addEventListener('mousemove',e=>{
+window.addEventListener('keydown', e=>keys[e.key.toLowerCase()]=true);
+window.addEventListener('keyup', e=>keys[e.key.toLowerCase()]=false);
+canvas.addEventListener('mousemove', e=>{
   const rect=canvas.getBoundingClientRect();
   mouse.x=e.clientX-rect.left;
   mouse.y=e.clientY-rect.top;
 });
 
-// START GAME
-function startGame(){
-  player.hp=100; player.score=0; bullets=[]; enemies=[];
+// ---------- INITIALIZE ----------
+function initGame(){
+  player.hp=100; player.special=0; player.score=0; bullets=[]; enemies=[]; obstacles=[];
   spawnEnemies(5);
+  generateObstacles();
   requestAnimationFrame(gameLoop);
 }
 
-// SPAWN ENEMIES
+// ---------- SPAWN ENEMIES ----------
 function spawnEnemies(n){
   for(let i=0;i<n;i++){
     enemies.push({
@@ -47,13 +51,22 @@ function spawnEnemies(n){
       size:25,
       color:'red',
       hp:30,
-      angle:0,
       shootTimer:0
     });
   }
 }
 
-// GAME LOOP
+// ---------- OBSTACLES ----------
+function generateObstacles(){
+  obstacles=[
+    {x:150,y:100,w:20,h:300,color:'gray'},
+    {x:500,y:0,w:20,h:250,color:'gray'},
+    {x:300,y:400,w:50,h:20,color:'orange'},
+    {x:600,y:350,w:50,h:20,color:'orange'}
+  ];
+}
+
+// ---------- GAME LOOP ----------
 function gameLoop(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
@@ -61,74 +74,88 @@ function gameLoop(){
   player.angle=Math.atan2(mouse.y-player.y,mouse.x-player.x);
 
   // PLAYER MOVEMENT
-  let nx=player.x,ny=player.y;
+  let nx=player.x, ny=player.y;
   if(keys['w']) ny-=3; if(keys['s']) ny+=3; if(keys['a']) nx-=3; if(keys['d']) nx+=3;
-  if(nx>0&&nx<canvas.width-player.size) player.x=nx;
-  if(ny>0&&ny<canvas.height-player.size) player.y=ny;
+  if(!checkCollision(nx,player.y,player.size)) player.x=nx;
+  if(!checkCollision(player.x,ny,player.size)) player.y=ny;
 
-  // PLAYER SHOOT
+  // FIRE ATTACKS
   if(keys['e']) fireBullet('Fire');
   if(keys['q']) fireBullet('Water');
-  if(keys['e']&&keys['q']) fireBullet('Steam',true);
+  if(keys['e'] && keys['q'] && player.special>=100){
+    fireBullet('Steam',true); player.special=0;
+  }
 
   // DRAW PLAYER
   ctx.save(); ctx.translate(player.x+player.size/2,player.y+player.size/2);
   ctx.rotate(player.angle);
-  ctx.fillStyle=player.color; ctx.fillRect(-player.size/2,-player.size/2,player.size,player.size);
+  ctx.fillStyle=player.color;
+  ctx.fillRect(-player.size/2,-player.size/2,player.size,player.size);
   ctx.restore();
 
-  // BULLETS
+  // ENEMY AI
+  enemies.forEach((en,i)=>{
+    // Move randomly + towards player
+    let dx=player.x-en.x, dy=player.y-en.y, dist=Math.hypot(dx,dy);
+    if(dist>0){ en.x+=dx/dist*1.5; en.y+=dy/dist*1.5; }
+
+    en.shootTimer++;
+    if(en.shootTimer>60){
+      en.shootTimer=0;
+      let angle=Math.atan2(player.y-en.y,player.x-en.x);
+      bullets.push({x:en.x+en.size/2, y:en.y+en.size/2, dx:4*Math.cos(angle), dy:4*Math.sin(angle), color:'orange', owner:'enemy', special:false});
+    }
+
+    // Draw enemy
+    ctx.fillStyle=en.color; ctx.fillRect(en.x,en.y,en.size,en.size);
+  });
+
+  // BULLETS UPDATE
   bullets.forEach((b,i)=>{
     b.x+=b.dx; b.y+=b.dy;
     ctx.beginPath();
     ctx.arc(b.x,b.y,b.special?10:5,0,Math.PI*2);
     ctx.fillStyle=b.color; ctx.fill();
 
-    // COLLISION WITH ENEMIES
-    enemies.forEach((en,j)=>{
-      if(b.x>en.x && b.x<en.x+en.size && b.y>en.y && b.y<en.y+en.size && b.owner==='player'){
-        en.hp-=b.special?10:3;
-        if(en.hp<=0){ enemies.splice(j,1); player.score+=10; document.getElementById('score').innerText=player.score; }
-        bullets.splice(i,1);
-      }
-    });
+    if(b.owner==='enemy' && hit(b,player)){ player.hp-=b.special?10:3; bullets.splice(i,1); }
+    if(b.owner==='player'){
+      enemies.forEach((en,j)=>{ if(hit(b,en)){ en.hp-=b.special?10:3; bullets.splice(i,1); if(en.hp<=0){ enemies.splice(j,1); player.score+=10; } } });
+    }
+
     if(b.x<0||b.x>canvas.width||b.y<0||b.y>canvas.height) bullets.splice(i,1);
   });
 
-  // ENEMIES
-  enemies.forEach(en=>{
-    // MOVE TOWARDS PLAYER
-    let dx=player.x-en.x, dy=player.y-en.y, dist=Math.hypot(dx,dy);
-    if(dist>0){ en.x+=dx/dist*1.5; en.y+=dy/dist*1.5; }
+  // DRAW OBSTACLES
+  obstacles.forEach(o=>{ ctx.fillStyle=o.color; ctx.fillRect(o.x,o.y,o.w,o.h); });
 
-    // SHOOT
-    en.shootTimer++;
-    if(en.shootTimer>60){
-      en.shootTimer=0;
-      let angle=Math.atan2(player.y-en.y,player.x-en.x);
-      bullets.push({x:en.x+en.size/2,y:en.y+en.size/2,dx:4*Math.cos(angle),dy:4*Math.sin(angle),color:'orange',owner:'enemy',special:false});
-    }
+  // UI
+  document.getElementById('hp').innerText='HP: '+player.hp;
+  document.getElementById('special').innerText='Special: '+player.special+'/100';
+  document.getElementById('score').innerText='Score: '+player.score;
 
-    // DRAW ENEMY
-    ctx.fillStyle=en.color; ctx.fillRect(en.x,en.y,en.size,en.size);
-  });
-
-  // PLAYER HP BAR
-  ctx.fillStyle='red'; ctx.fillRect(20,20,player.hp*2,20);
-  ctx.strokeStyle='white'; ctx.strokeRect(20,20,200,20);
-
+  // CHECK GAME OVER
   if(player.hp<=0){ alert('Game Over! Score: '+player.score); return; }
+
   requestAnimationFrame(gameLoop);
 }
 
-// FIRE BULLET
+// ---------- HELPER FUNCTIONS ----------
 function fireBullet(type,special=false){
   let color=type==='Fire'?'orange':type==='Water'?'cyan':'yellow';
-  bullets.push({x:player.x+player.size/2,y:player.y+player.size/2,dx:5*Math.cos(player.angle),dy:5*Math.sin(player.angle),color:color,owner:'player',special:special});
+  bullets.push({x:player.x+player.size/2, y:player.y+player.size/2, dx:5*Math.cos(player.angle), dy:5*Math.sin(player.angle), color:color, owner:'player', special:special});
 }
+
+function hit(b,target){ return b.x>target.x && b.x<target.x+target.size && b.y>target.y && b.y<target.y+target.size; }
+
+function checkCollision(x,y,size){ return obstacles.some(o=> x<size+o.x && x+size>o.x && y<size+o.y && y+size>o.y); }
+
+// ---------- START GAME ----------
+initGame();
 </script>
 </body>
 </html>
+
+
 
 
 
