@@ -2,158 +2,137 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Element Clash Arena</title>
+<title>3D Elemental Arena</title>
 <style>
-body { margin:0; font-family:sans-serif; background:#111; overflow:hidden; color:#fff; }
-canvas { display:block; margin:0 auto; background:linear-gradient(#222,#444); }
-#ui { position:absolute; top:10px; left:10px; }
-#ui p { margin:5px; font-weight:bold; }
+body { margin:0; overflow:hidden; }
+#ui { position:absolute; top:10px; left:10px; color:white; font-family:sans-serif; }
+#ui p { margin:5px; }
 </style>
 </head>
 <body>
-<canvas id="gameCanvas" width="800" height="500"></canvas>
 <div id="ui">
 <p id="hp">HP: 100</p>
 <p id="special">Special: 0/100</p>
 <p id="score">Score: 0</p>
 </div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.158.0/examples/js/controls/PointerLockControls.js"></script>
+
 <script>
-// --------- GAME VARIABLES ---------
-const canvas=document.getElementById('gameCanvas');
-const ctx=canvas.getContext('2d');
+// ---------- SETUP ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x222222);
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
 
-let player={x:400,y:250,size:30,color:'blue',hp:100,special:0,score:0,angle:0};
-let bullets=[],enemies=[],obstacles=[],keys={},mouse={x:400,y:250};
+// ---------- LIGHT ----------
+const light = new THREE.DirectionalLight(0xffffff,1);
+light.position.set(5,10,5);
+scene.add(light);
 
-// INPUT
-window.addEventListener('keydown', e=>keys[e.key.toLowerCase()]=true);
-window.addEventListener('keyup', e=>keys[e.key.toLowerCase()]=false);
-canvas.addEventListener('mousemove', e=>{
-  const rect=canvas.getBoundingClientRect();
-  mouse.x=e.clientX-rect.left;
-  mouse.y=e.clientY-rect.top;
-});
+// ---------- FLOOR ----------
+const floorGeometry = new THREE.PlaneGeometry(50,50);
+const floorMaterial = new THREE.MeshStandardMaterial({color:0x555555});
+const floor = new THREE.Mesh(floorGeometry,floorMaterial);
+floor.rotation.x=-Math.PI/2;
+scene.add(floor);
 
-// ---------- INITIALIZE ----------
-function initGame(){
-  player.hp=100; player.special=0; player.score=0; bullets=[]; enemies=[]; obstacles=[];
-  spawnEnemies(5);
-  generateObstacles();
-  requestAnimationFrame(gameLoop);
-}
+// ---------- PLAYER ----------
+const playerGeometry = new THREE.BoxGeometry(1,1,1);
+const playerMaterial = new THREE.MeshStandardMaterial({color:0x0000ff});
+const player = new THREE.Mesh(playerGeometry,playerMaterial);
+player.position.y=0.5;
+scene.add(player);
 
-// ---------- SPAWN ENEMIES ----------
+// ---------- ENEMIES ----------
+let enemies = [];
 function spawnEnemies(n){
   for(let i=0;i<n;i++){
-    enemies.push({
-      x:Math.random()*700+50,
-      y:Math.random()*400+50,
-      size:25,
-      color:'red',
-      hp:30,
-      shootTimer:0
-    });
+    const geo = new THREE.BoxGeometry(1,1,1);
+    const mat = new THREE.MeshStandardMaterial({color:0xff0000});
+    const enemy = new THREE.Mesh(geo, mat);
+    enemy.position.set(Math.random()*20-10,0.5,Math.random()*20-10);
+    scene.add(enemy);
+    enemies.push(enemy);
   }
 }
 
-// ---------- OBSTACLES ----------
-function generateObstacles(){
-  obstacles=[
-    {x:150,y:100,w:20,h:300,color:'gray'},
-    {x:500,y:0,w:20,h:250,color:'gray'},
-    {x:300,y:400,w:50,h:20,color:'orange'},
-    {x:600,y:350,w:50,h:20,color:'orange'}
-  ];
-}
+// ---------- CAMERA CONTROLS ----------
+const controls = new THREE.PointerLockControls(camera, document.body);
+document.body.addEventListener('click', ()=>{ controls.lock(); });
+camera.position.set(player.position.x, player.position.y+5, player.position.z+5);
+
+// ---------- MOVEMENT ----------
+let keys={};
+window.addEventListener('keydown',e=>keys[e.key.toLowerCase()]=true);
+window.addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
 
 // ---------- GAME LOOP ----------
-function gameLoop(){
-  ctx.clearRect(0,0,canvas.width,canvas.height);
+let bullets = [];
+let playerHP = 100;
+let playerSpecial = 0;
+let score = 0;
 
-  // PLAYER ROTATION
-  player.angle=Math.atan2(mouse.y-player.y,mouse.x-player.x);
+function animate(){
+  requestAnimationFrame(animate);
 
-  // PLAYER MOVEMENT
-  let nx=player.x, ny=player.y;
-  if(keys['w']) ny-=3; if(keys['s']) ny+=3; if(keys['a']) nx-=3; if(keys['d']) nx+=3;
-  if(!checkCollision(nx,player.y,player.size)) player.x=nx;
-  if(!checkCollision(player.x,ny,player.size)) player.y=ny;
+  // Player movement
+  const speed = 0.1;
+  if(keys['w']) player.position.z -= speed;
+  if(keys['s']) player.position.z += speed;
+  if(keys['a']) player.position.x -= speed;
+  if(keys['d']) player.position.x += speed;
 
-  // FIRE ATTACKS
-  if(keys['e']) fireBullet('Fire');
-  if(keys['q']) fireBullet('Water');
-  if(keys['e'] && keys['q'] && player.special>=100){
-    fireBullet('Steam',true); player.special=0;
-  }
+  // Camera follows player
+  camera.position.x = player.position.x;
+  camera.position.z = player.position.z + 5;
+  camera.position.y = player.position.y + 5;
+  camera.lookAt(player.position);
 
-  // DRAW PLAYER
-  ctx.save(); ctx.translate(player.x+player.size/2,player.y+player.size/2);
-  ctx.rotate(player.angle);
-  ctx.fillStyle=player.color;
-  ctx.fillRect(-player.size/2,-player.size/2,player.size,player.size);
-  ctx.restore();
-
-  // ENEMY AI
-  enemies.forEach((en,i)=>{
-    // Move randomly + towards player
-    let dx=player.x-en.x, dy=player.y-en.y, dist=Math.hypot(dx,dy);
-    if(dist>0){ en.x+=dx/dist*1.5; en.y+=dy/dist*1.5; }
-
-    en.shootTimer++;
-    if(en.shootTimer>60){
-      en.shootTimer=0;
-      let angle=Math.atan2(player.y-en.y,player.x-en.x);
-      bullets.push({x:en.x+en.size/2, y:en.y+en.size/2, dx:4*Math.cos(angle), dy:4*Math.sin(angle), color:'orange', owner:'enemy', special:false});
-    }
-
-    // Draw enemy
-    ctx.fillStyle=en.color; ctx.fillRect(en.x,en.y,en.size,en.size);
+  // Enemy AI (simple: move randomly)
+  enemies.forEach(e=>{
+    e.position.x += (Math.random()-0.5)*0.05;
+    e.position.z += (Math.random()-0.5)*0.05;
   });
 
-  // BULLETS UPDATE
-  bullets.forEach((b,i)=>{
-    b.x+=b.dx; b.y+=b.dy;
-    ctx.beginPath();
-    ctx.arc(b.x,b.y,b.special?10:5,0,Math.PI*2);
-    ctx.fillStyle=b.color; ctx.fill();
+  renderer.render(scene,camera);
 
-    if(b.owner==='enemy' && hit(b,player)){ player.hp-=b.special?10:3; bullets.splice(i,1); }
-    if(b.owner==='player'){
-      enemies.forEach((en,j)=>{ if(hit(b,en)){ en.hp-=b.special?10:3; bullets.splice(i,1); if(en.hp<=0){ enemies.splice(j,1); player.score+=10; } } });
-    }
-
-    if(b.x<0||b.x>canvas.width||b.y<0||b.y>canvas.height) bullets.splice(i,1);
-  });
-
-  // DRAW OBSTACLES
-  obstacles.forEach(o=>{ ctx.fillStyle=o.color; ctx.fillRect(o.x,o.y,o.w,o.h); });
-
-  // UI
-  document.getElementById('hp').innerText='HP: '+player.hp;
-  document.getElementById('special').innerText='Special: '+player.special+'/100';
-  document.getElementById('score').innerText='Score: '+player.score;
-
-  // CHECK GAME OVER
-  if(player.hp<=0){ alert('Game Over! Score: '+player.score); return; }
-
-  requestAnimationFrame(gameLoop);
+  // Update UI
+  document.getElementById('hp').innerText = 'HP: '+playerHP;
+  document.getElementById('special').innerText = 'Special: '+playerSpecial+'/100';
+  document.getElementById('score').innerText = 'Score: '+score;
 }
 
-// ---------- HELPER FUNCTIONS ----------
-function fireBullet(type,special=false){
-  let color=type==='Fire'?'orange':type==='Water'?'cyan':'yellow';
-  bullets.push({x:player.x+player.size/2, y:player.y+player.size/2, dx:5*Math.cos(player.angle), dy:5*Math.sin(player.angle), color:color, owner:'player', special:special});
+// ---------- FIRE BULLETS ----------
+window.addEventListener('keydown', e=>{
+  if(e.key.toLowerCase() === 'e') shoot('Fire');
+  if(e.key.toLowerCase() === 'q') shoot('Water');
+  if(e.key.toLowerCase() === 'e' && keys['q']) shoot('Steam');
+});
+
+function shoot(type){
+  const bulletGeo = new THREE.SphereGeometry(type==='Steam'?0.3:0.2,8,8);
+  const color = type==='Fire'?0xffa500:type==='Water'?0x00ffff:0xffff00;
+  const bulletMat = new THREE.MeshStandardMaterial({color:color});
+  const bullet = new THREE.Mesh(bulletGeo,bulletMat);
+  bullet.position.set(player.position.x,player.position.y+0.5,player.position.z);
+  // shoot forward
+  const dir = new THREE.Vector3(0,0,-1);
+  dir.applyEuler(player.rotation);
+  bullet.userData = {dir:dir,type:type};
+  bullets.push(bullet);
+  scene.add(bullet);
 }
 
-function hit(b,target){ return b.x>target.x && b.x<target.x+target.size && b.y>target.y && b.y<target.y+target.size; }
-
-function checkCollision(x,y,size){ return obstacles.some(o=> x<size+o.x && x+size>o.x && y<size+o.y && y+size>o.y); }
-
-// ---------- START GAME ----------
-initGame();
+animate();
+spawnEnemies(5);
 </script>
 </body>
 </html>
+
+
 
 
 
