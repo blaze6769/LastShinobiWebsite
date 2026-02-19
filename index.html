@@ -1,197 +1,215 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="nl">
 <head>
 <meta charset="UTF-8">
-<title>Last Shinobi Standing 3D</title>
+<title>Last Shinobi Standing 2D</title>
 <style>
-body { margin:0; overflow:hidden; background:#111; }
-#ui {position:absolute; top:10px; left:10px; color:white; font-family:sans-serif;}
-#ui p {margin:5px;}
-#info {position:absolute; top:10px; right:10px; color:white; font-family:sans-serif;}
+  body { margin:0; overflow:hidden; background:#111; font-family:sans-serif; }
+  canvas { display:block; background:#222; }
+  #menu {
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    text-align:center; color:white;
+  }
+  #menu button { display:block; margin:10px auto; padding:10px 20px; font-size:20px; cursor:pointer; }
+  #ui {
+    position:absolute; top:10px; left:10px; color:white;
+  }
+  #ui p { margin:5px; }
 </style>
 </head>
 <body>
-<div id="ui">
-<p id="hp">HP: 100</p>
-<p id="special">Special: 0/100</p>
-<p id="score">Score: 0</p>
-</div>
-<div id="info">Click to start | WASD: Move | Mouse: Look | E/Q attack | E+Q special</div>
 
-<script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.158.0/examples/js/controls/PointerLockControls.js"></script>
+<div id="menu">
+  <h1>Last Shinobi Standing</h1>
+  <button id="singleplayer">Singleplayer</button>
+  <button id="multiplayer">Multiplayer</button>
+  <button id="settings">Settings</button>
+</div>
+
+<div id="ui" style="display:none;">
+  <p id="hp">HP: 100</p>
+  <p id="special">Special: 0/100</p>
+  <p id="score">Score: 0</p>
+</div>
+
+<canvas id="gameCanvas"></canvas>
 
 <script>
-// ---------- SCENE ----------
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x222222);
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
 
-// ---------- CAMERA ----------
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-camera.position.set(0,5,10);
+// ---------- GAME VARIABLES ----------
+let gameRunning = false;
+let player = {x:200,y:200,size:40,color:'blue',hp:100,special:0};
+let enemy = {x:600,y:200,size:40,color:'red',hp:100};
+let bullets = [];
+let enemyBullets = [];
+let obstacles = [];
+let score = 0;
 
-// ---------- RENDERER ----------
-const renderer = new THREE.WebGLRenderer({antialias:true});
-renderer.setSize(window.innerWidth, window.innerHeight);
-document.body.appendChild(renderer.domElement);
+// ---------- ELEMENT ATTACKS ----------
+const elements = [
+  {name:'Fire',key:'e',color:'orange',damage:5},
+  {name:'Water',key:'q',color:'blue',damage:5}
+];
 
-// ---------- LIGHT ----------
-const ambient = new THREE.AmbientLight(0xffffff,0.7);
-scene.add(ambient);
-const directional = new THREE.DirectionalLight(0xffffff,0.8);
-directional.position.set(10,20,10);
-scene.add(directional);
+// ---------- KISTEN ----------
+let chests = [
+  {x:400,y:100,size:30,active:true},
+  {x:700,y:400,size:30,active:true}
+];
 
-// ---------- FLOOR ----------
-const floorGeo = new THREE.PlaneGeometry(50,50);
-const floorMat = new THREE.MeshStandardMaterial({color:0x555555});
-const floor = new THREE.Mesh(floorGeo,floorMat);
-floor.rotation.x=-Math.PI/2;
-scene.add(floor);
+// ---------- INPUT ----------
+let keys = {};
+window.addEventListener('keydown', e => keys[e.key.toLowerCase()]=true);
+window.addEventListener('keyup', e => keys[e.key.toLowerCase()]=false);
+let mouse = {x:0,y:0};
+canvas.addEventListener('mousemove', e => {
+  mouse.x = e.clientX;
+  mouse.y = e.clientY;
+});
 
-// ---------- PLAYER ----------
-const playerGeo = new THREE.BoxGeometry(1,1,1);
-const playerMat = new THREE.MeshStandardMaterial({color:0x0000ff});
-const player = new THREE.Mesh(playerGeo,playerMat);
-player.position.set(0,0.5,0);
-scene.add(player);
+// ---------- START MENU ----------
+document.getElementById('singleplayer').addEventListener('click',()=>{
+  document.getElementById('menu').style.display='none';
+  document.getElementById('ui').style.display='block';
+  gameRunning = true;
+});
 
-// ---------- ENEMY ----------
-const enemyGeo = new THREE.BoxGeometry(1,1,1);
-const enemyMat = new THREE.MeshStandardMaterial({color:0xff0000});
-const enemy = new THREE.Mesh(enemyGeo,enemyMat);
-enemy.position.set(5,0.5,0);
-scene.add(enemy);
+document.getElementById('multiplayer').addEventListener('click',()=>{
+  alert('Multiplayer not ready yet!');
+});
+
+document.getElementById('settings').addEventListener('click',()=>{
+  alert('Settings menu coming soon!');
+});
+
+// ---------- SHOOT FUNCTION ----------
+function shoot(owner){
+  let target = owner==='player'?bullets:enemyBullets;
+  let color = owner==='player'?elements[0].color:elements[1].color;
+  let dx = owner==='player'?mouse.x-player.x:player.x-enemy.x;
+  let dy = owner==='player'?mouse.y-player.y:player.y-enemy.y;
+  let mag = Math.sqrt(dx*dx+dy*dy);
+  target.push({
+    x: owner==='player'?player.x:enemy.x,
+    y: owner==='player'?player.y:enemy.y,
+    dx: dx/mag*8,
+    dy: dy/mag*8,
+    size:8,
+    color: color,
+    owner: owner
+  });
+}
 
 // ---------- OBSTACLES ----------
-let obstacles=[];
 function createObstacles(){
-  const data = [
-    {x:5,z:0,w:1,h:10},{x:-5,z:-5,w:1,h:5},{x:0,z:5,w:3,h:1}
-  ];
-  data.forEach(d=>{
-    const geo = new THREE.BoxGeometry(d.w,1,d.h);
-    const mat = new THREE.MeshStandardMaterial({color:0x888888});
-    const mesh = new THREE.Mesh(geo,mat);
-    mesh.position.set(d.x,0.5,d.z);
-    scene.add(mesh);
-    obstacles.push(mesh);
-  });
+  obstacles.push({x:300,y:300,w:100,h:20});
+  obstacles.push({x:500,y:500,w:20,h:100});
+  obstacles.push({x:700,y:200,w:150,h:20});
 }
 createObstacles();
 
-// ---------- CONTROLS ----------
-const controls = new THREE.PointerLockControls(camera,document.body);
-document.body.addEventListener('click',()=>{controls.lock();});
-
-// ---------- INPUT ----------
-let keys={};
-window.addEventListener('keydown',e=>keys[e.key.toLowerCase()]=true);
-window.addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
-
-// ---------- GAME VARIABLES ----------
-let bullets=[];
-let playerHP=100;
-let playerSpecial=0;
-let score=0;
-
-// ---------- BULLETS ----------
-function shoot(type,special=false){
-  const geo = new THREE.SphereGeometry(special?0.3:0.2,8,8);
-  const color = type==='Fire'?0xff4500:type==='Water'?0x1e90ff:0xffff00;
-  const mat = new THREE.MeshStandardMaterial({color});
-  const bullet = new THREE.Mesh(geo,mat);
-  bullet.position.set(player.position.x,player.position.y+0.5,player.position.z);
-  const dir = new THREE.Vector3(0,0,-1).applyEuler(player.rotation);
-  bullet.userData={dir,type,owner:'player',special};
-  bullets.push(bullet);
-  scene.add(bullet);
-}
-
-// ---------- HIT CHECK ----------
-function hitCheck(b,target){
-  const dx=b.position.x-target.position.x;
-  const dz=b.position.z-target.position.z;
-  return Math.abs(dx)<0.5 && Math.abs(dz)<0.5;
-}
-
 // ---------- GAME LOOP ----------
-function animate(){
-  requestAnimationFrame(animate);
+function gameLoop(){
+  if(!gameRunning) return;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  // PLAYER MOVE
-  const speed=0.15;
-  let nx=player.position.x;
-  let nz=player.position.z;
-  if(keys['w']) nz-=speed;
-  if(keys['s']) nz+=speed;
-  if(keys['a']) nx-=speed;
-  if(keys['d']) nx+=speed;
-  if(!obstacles.some(o=>Math.abs(nx-o.position.x)<0.5 && Math.abs(nz-o.position.z)<0.5)) player.position.x=nx;
-  if(!obstacles.some(o=>Math.abs(nx-o.position.x)<0.5 && Math.abs(nz-o.position.z)<0.5)) player.position.z=nz;
+  // MOVE PLAYER
+  let speed = 5;
+  if(keys['w']) player.y -= speed;
+  if(keys['s']) player.y += speed;
+  if(keys['a']) player.x -= speed;
+  if(keys['d']) player.x += speed;
 
-  // ROTATE PLAYER TOWARD CAMERA
-  const dir = new THREE.Vector3();
-  camera.getWorldDirection(dir);
-  player.rotation.y = Math.atan2(dir.x, dir.z);
+  // PLAYER SHOOT
+  if(keys['e']) shoot('player');
+  if(keys['q']) shoot('player');
 
   // ENEMY AI MOVE
-  const dx = player.position.x - enemy.position.x;
-  const dz = player.position.z - enemy.position.z;
-  const dist = Math.sqrt(dx*dx + dz*dz);
-  if(dist>2){
-    enemy.position.x += dx/dist*0.08;
-    enemy.position.z += dz/dist*0.08;
+  let ex = enemy.x;
+  let ey = enemy.y;
+  let dx = player.x-ex;
+  let dy = player.y-ey;
+  let dist = Math.sqrt(dx*dx+dy*dy);
+  if(dist>100){
+    enemy.x += dx/dist*3;
+    enemy.y += dy/dist*3;
   }
 
   // ENEMY SHOOT
-  if(Math.random()<0.01){
-    const geo = new THREE.SphereGeometry(0.2,8,8);
-    const mat = new THREE.MeshStandardMaterial({color:0xffd700});
-    const bullet = new THREE.Mesh(geo,mat);
-    bullet.position.set(enemy.position.x,enemy.position.y+0.5,enemy.position.z);
-    const dir = new THREE.Vector3(player.position.x-enemy.position.x,0,player.position.z-enemy.position.z).normalize();
-    bullet.userData={dir,type:'Fire',owner:'enemy',special:false};
-    bullets.push(bullet);
-    scene.add(bullet);
-  }
+  if(Math.random()<0.02) shoot('enemy');
 
   // UPDATE BULLETS
   bullets.forEach((b,i)=>{
-    b.position.add(b.userData.dir.clone().multiplyScalar(0.25));
-    if(b.userData.owner==='enemy' && hitCheck(b,player)){playerHP -= b.userData.special?10:5; scene.remove(b); bullets.splice(i,1);}
-    if(b.userData.owner==='player' && hitCheck(b,enemy)){scene.remove(b); bullets.splice(i,1); score+=10;}
-    if(Math.abs(b.position.x)>25 || Math.abs(b.position.z)>25){ scene.remove(b); bullets.splice(i,1);}
+    b.x += b.dx; b.y += b.dy;
+    // HIT CHECK
+    if(Math.abs(b.x-enemy.x)<enemy.size/2 && Math.abs(b.y-enemy.y)<enemy.size/2){
+      enemy.hp -=5; bullets.splice(i,1); score+=10;
+    }
+    if(b.x<0||b.x>canvas.width||b.y<0||b.y>canvas.height) bullets.splice(i,1);
   });
 
-  // CAMERA FOLLOW
-  camera.position.x = player.position.x;
-  camera.position.z = player.position.z + 10;
-  camera.position.y = player.position.y + 5;
-  camera.lookAt(player.position);
+  enemyBullets.forEach((b,i)=>{
+    b.x += b.dx; b.y += b.dy;
+    if(Math.abs(b.x-player.x)<player.size/2 && Math.abs(b.y-player.y)<player.size/2){
+      player.hp -=5; enemyBullets.splice(i,1);
+    }
+    if(b.x<0||b.x>canvas.width||b.y<0||b.y>canvas.height) enemyBullets.splice(i,1);
+  });
 
-  // UI
-  document.getElementById('hp').innerText='HP: '+playerHP;
-  document.getElementById('special').innerText='Special: '+playerSpecial+'/100';
+  // DRAW PLAYER & ENEMY
+  ctx.fillStyle = player.color;
+  ctx.fillRect(player.x-player.size/2, player.y-player.size/2, player.size, player.size);
+
+  ctx.fillStyle = enemy.color;
+  ctx.fillRect(enemy.x-enemy.size/2, enemy.y-enemy.size/2, enemy.size, enemy.size);
+
+  // DRAW BULLETS
+  bullets.forEach(b=>{
+    ctx.fillStyle = b.color;
+    ctx.beginPath();
+    ctx.arc(b.x,b.y,b.size,0,Math.PI*2);
+    ctx.fill();
+  });
+  enemyBullets.forEach(b=>{
+    ctx.fillStyle = b.color;
+    ctx.beginPath();
+    ctx.arc(b.x,b.y,b.size,0,Math.PI*2);
+    ctx.fill();
+  });
+
+  // DRAW OBSTACLES
+  ctx.fillStyle = 'grey';
+  obstacles.forEach(o=>{
+    ctx.fillRect(o.x,o.y,o.w,o.h);
+  });
+
+  // DRAW CHESTS
+  ctx.fillStyle='yellow';
+  chests.forEach(c=>{
+    ctx.fillRect(c.x-c.size/2,c.y-c.size/2,c.size,c.size);
+  });
+
+  // UPDATE UI
+  document.getElementById('hp').innerText='HP: '+player.hp;
+  document.getElementById('special').innerText='Special: '+player.special+'/100';
   document.getElementById('score').innerText='Score: '+score;
 
   // GAME OVER
-  if(playerHP<=0){ alert('Game Over! Score: '+score); return; }
+  if(player.hp<=0){ alert('Game Over! Score: '+score); return; }
+  if(enemy.hp<=0){ alert('You Won! Score: '+score); return; }
 
-  renderer.render(scene,camera);
+  requestAnimationFrame(gameLoop);
 }
 
-// ---------- ATTACK INPUT ----------
-window.addEventListener('keydown',e=>{
-  if(e.key.toLowerCase()==='e') shoot('Fire');
-  if(e.key.toLowerCase()==='q') shoot('Water');
-  if(e.key.toLowerCase()==='e' && keys['q']) shoot('Steam',true);
-});
-
-animate();
+gameLoop();
 </script>
 </body>
 </html>
+
 
 
 
