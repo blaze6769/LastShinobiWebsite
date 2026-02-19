@@ -18,9 +18,24 @@
   </div>
 
   <script>
-    function startGame() {
-      document.getElementById('game').innerHTML = "<p>Game loading… (hier komt straks je echte game)</p>";
-    }
-  </script>
+  // Jutsu opties
+  const jutsus = ["Fireball 🔥", "Water Wave 🌊", "Lightning ⚡", "Earth Quake 🌍"];
+
+  function startGame() {
+    // Kies een random jutsu voor de speler
+    const playerJutsu = jutsus[Math.floor(Math.random() * jutsus.length)];
+    // Kies een random jutsu voor de tegenstander
+    const enemyJutsu = jutsus[Math.floor(Math.random() * jutsus.length)];
+
+    // Toon het resultaat in de game div
+    document.getElementById('game').innerHTML = `
+      <p>Jij kiest: ${playerJutsu}</p>
+      <p>Tegenstander kiest: ${enemyJutsu}</p>
+      <p>Go fight! 💥</p>
+    `;
+  }
+</script>
+
 </body>
+
 </html>
