@@ -42,8 +42,8 @@ canvas.height = window.innerHeight;
 
 // ---------- GAME VARIABLES ----------
 let gameRunning = false;
-let player = {x:200,y:200,size:40,color:'blue',hp:100,special:0};
-let enemy = {x:600,y:200,size:40,color:'red',hp:100};
+let player = {x:canvas.width/4, y:canvas.height/2, size:40, color:'blue', hp:100, special:0};
+let enemy = {x:3*canvas.width/4, y:canvas.height/2, size:40, color:'red', hp:100};
 let bullets = [];
 let enemyBullets = [];
 let obstacles = [];
@@ -51,24 +51,19 @@ let score = 0;
 
 // ---------- ELEMENT ATTACKS ----------
 const elements = [
-  {name:'Fire',key:'e',color:'orange',damage:5},
-  {name:'Water',key:'q',color:'blue',damage:5}
-];
-
-// ---------- KISTEN ----------
-let chests = [
-  {x:400,y:100,size:30,active:true},
-  {x:700,y:400,size:30,active:true}
+  {name:'Fire', key:'e', color:'orange', damage:5},
+  {name:'Water', key:'q', color:'blue', damage:5}
 ];
 
 // ---------- INPUT ----------
 let keys = {};
 window.addEventListener('keydown', e => keys[e.key.toLowerCase()]=true);
 window.addEventListener('keyup', e => keys[e.key.toLowerCase()]=false);
-let mouse = {x:0,y:0};
+let mouse = {x:0, y:0};
 canvas.addEventListener('mousemove', e => {
-  mouse.x = e.clientX;
-  mouse.y = e.clientY;
+  const rect = canvas.getBoundingClientRect();
+  mouse.x = e.clientX - rect.left;
+  mouse.y = e.clientY - rect.top;
 });
 
 // ---------- START MENU ----------
@@ -78,21 +73,18 @@ document.getElementById('singleplayer').addEventListener('click',()=>{
   gameRunning = true;
 });
 
-document.getElementById('multiplayer').addEventListener('click',()=>{
-  alert('Multiplayer not ready yet!');
-});
-
-document.getElementById('settings').addEventListener('click',()=>{
-  alert('Settings menu coming soon!');
-});
+document.getElementById('multiplayer').addEventListener('click',()=>{alert('Multiplayer not ready yet!');});
+document.getElementById('settings').addEventListener('click',()=>{alert('Settings coming soon!');});
 
 // ---------- SHOOT FUNCTION ----------
 function shoot(owner){
   let target = owner==='player'?bullets:enemyBullets;
   let color = owner==='player'?elements[0].color:elements[1].color;
-  let dx = owner==='player'?mouse.x-player.x:player.x-enemy.x;
-  let dy = owner==='player'?mouse.y-player.y:player.y-enemy.y;
-  let mag = Math.sqrt(dx*dx+dy*dy);
+  let dx = owner==='player'?mouse.x - (owner==='player'?player.x:enemy.x):player.x - enemy.x;
+  let dy = owner==='player'?mouse.y - (owner==='player'?player.y:enemy.y):player.y - enemy.y;
+  if(owner==='enemy'){dx = player.x - enemy.x; dy = player.y - enemy.y;}
+  let mag = Math.sqrt(dx*dx + dy*dy);
+  if(mag===0) mag=1;
   target.push({
     x: owner==='player'?player.x:enemy.x,
     y: owner==='player'?player.y:enemy.y,
@@ -106,9 +98,9 @@ function shoot(owner){
 
 // ---------- OBSTACLES ----------
 function createObstacles(){
-  obstacles.push({x:300,y:300,w:100,h:20});
-  obstacles.push({x:500,y:500,w:20,h:100});
-  obstacles.push({x:700,y:200,w:150,h:20});
+  obstacles.push({x:canvas.width/2-50, y:canvas.height/2, w:100, h:20});
+  obstacles.push({x:canvas.width/3, y:canvas.height/3, w:150, h:20});
+  obstacles.push({x:2*canvas.width/3, y:2*canvas.height/3, w:20, h:150});
 }
 createObstacles();
 
@@ -129,12 +121,10 @@ function gameLoop(){
   if(keys['q']) shoot('player');
 
   // ENEMY AI MOVE
-  let ex = enemy.x;
-  let ey = enemy.y;
-  let dx = player.x-ex;
-  let dy = player.y-ey;
-  let dist = Math.sqrt(dx*dx+dy*dy);
-  if(dist>100){
+  let dx = player.x - enemy.x;
+  let dy = player.y - enemy.y;
+  let dist = Math.sqrt(dx*dx + dy*dy);
+  if(dist>100){ // volg speler alleen als te ver
     enemy.x += dx/dist*3;
     enemy.y += dy/dist*3;
   }
@@ -145,7 +135,6 @@ function gameLoop(){
   // UPDATE BULLETS
   bullets.forEach((b,i)=>{
     b.x += b.dx; b.y += b.dy;
-    // HIT CHECK
     if(Math.abs(b.x-enemy.x)<enemy.size/2 && Math.abs(b.y-enemy.y)<enemy.size/2){
       enemy.hp -=5; bullets.splice(i,1); score+=10;
     }
@@ -163,7 +152,6 @@ function gameLoop(){
   // DRAW PLAYER & ENEMY
   ctx.fillStyle = player.color;
   ctx.fillRect(player.x-player.size/2, player.y-player.size/2, player.size, player.size);
-
   ctx.fillStyle = enemy.color;
   ctx.fillRect(enemy.x-enemy.size/2, enemy.y-enemy.size/2, enemy.size, enemy.size);
 
@@ -182,16 +170,8 @@ function gameLoop(){
   });
 
   // DRAW OBSTACLES
-  ctx.fillStyle = 'grey';
-  obstacles.forEach(o=>{
-    ctx.fillRect(o.x,o.y,o.w,o.h);
-  });
-
-  // DRAW CHESTS
-  ctx.fillStyle='yellow';
-  chests.forEach(c=>{
-    ctx.fillRect(c.x-c.size/2,c.y-c.size/2,c.size,c.size);
-  });
+  ctx.fillStyle='grey';
+  obstacles.forEach(o=>ctx.fillRect(o.x-o.w/2,o.y-o.h/2,o.w,o.h));
 
   // UPDATE UI
   document.getElementById('hp').innerText='HP: '+player.hp;
@@ -199,8 +179,8 @@ function gameLoop(){
   document.getElementById('score').innerText='Score: '+score;
 
   // GAME OVER
-  if(player.hp<=0){ alert('Game Over! Score: '+score); return; }
-  if(enemy.hp<=0){ alert('You Won! Score: '+score); return; }
+  if(player.hp<=0){ alert('Game Over! Score: '+score); gameRunning=false; return; }
+  if(enemy.hp<=0){ alert('You Won! Score: '+score); gameRunning=false; return; }
 
   requestAnimationFrame(gameLoop);
 }
@@ -209,6 +189,8 @@ gameLoop();
 </script>
 </body>
 </html>
+
+
 
 
 
