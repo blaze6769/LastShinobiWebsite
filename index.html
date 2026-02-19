@@ -4,10 +4,10 @@
 <meta charset="UTF-8">
 <title>Last Shinobi Battle</title>
 <style>
-  body { margin: 0; font-family: sans-serif; background-color: #222; color: #fff; text-align: center; }
-  canvas { background-color: #a0d8f0; display: block; margin: 0 auto; border: 2px solid #000; }
-  #ui { margin-top: 10px; }
-  button { margin: 5px; padding: 10px 20px; font-size: 16px; cursor: pointer; }
+  body { margin:0; font-family:sans-serif; background:#222; color:#fff; text-align:center;}
+  canvas { display:block; margin:0 auto; border:2px solid #000; background: linear-gradient(#87ceeb, #00aaff);}
+  #ui { margin-top:10px;}
+  button { margin:5px; padding:10px 20px; font-size:16px; cursor:pointer;}
   .element { display:inline-block; padding:5px 10px; border:1px solid #fff; margin:2px; cursor:pointer; }
   .element.selected { border:2px solid yellow; }
 </style>
@@ -48,7 +48,7 @@
 </div>
 
 <div id="gameArea" style="display:none;">
-  <canvas id="gameCanvas" width="600" height="400"></canvas>
+  <canvas id="gameCanvas" width="700" height="400"></canvas>
   <div id="ui">
     <p id="playerHP">HP: 100</p>
     <p id="specialBar">Special: 0/100</p>
@@ -63,18 +63,22 @@
 </div>
 
 <script>
-// ---------- VARIABLES ----------
 let selectedElements = [];
 let elementAmmo = {};
-let gameState = 'menu'; // menu, select, loading, playing, end
+let gameState = 'menu';
 
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
-let player = { x:50, y:200, size:30, color:'blue', hp:100, special:0 };
-let enemy = { x:520, y:200, size:30, color:'red', hp:100 };
+let player = { x:50, y:200, size:30, color:'blue', hp:100, special:0, angle:0 };
+let enemy = { x:620, y:200, size:30, color:'red', hp:100, shootTimer:0 };
 let keys = {};
 let bullets = [];
+let chests = [];
+
+const jutsuSpeed = 5;
+const jutsuDamage = 3;
+const specialDamage = 10;
 
 // ---------- MENU & SETTINGS ----------
 function startSingleplayer(){
@@ -92,6 +96,7 @@ function backToMenu(){
   document.getElementById('settings').style.display='none';
   document.getElementById('characterSelect').style.display='none';
   document.getElementById('endScreen').style.display='none';
+  document.getElementById('gameArea').style.display='none';
   gameState='menu';
 }
 
@@ -127,9 +132,9 @@ function startGame(){
 function initBattle(){
   document.getElementById('loadingScreen').style.display='none';
   document.getElementById('gameArea').style.display='block';
-  // initialize ammo
   selectedElements.forEach(e=>elementAmmo[e]=6);
   gameState='playing';
+  spawnChests(5);
   requestAnimationFrame(gameLoop);
 }
 
@@ -143,9 +148,20 @@ canvas.addEventListener('mousemove', function(e){
   player.mouseY = e.clientY - rect.top;
 });
 
+// ---------- SPAWN CHESTS ----------
+function spawnChests(num){
+  for(let i=0;i<num;i++){
+    chests.push({x:Math.random()*(canvas.width-30),y:Math.random()*(canvas.height-30),size:20});
+  }
+}
+
 // ---------- GAME LOOP ----------
 function gameLoop(){
   if(gameState!=='playing') return;
+  
+  // ---- player rotation to mouse ----
+  player.angle = Math.atan2(player.mouseY-(player.y+player.size/2), player.mouseX-(player.x+player.size/2));
+  
   // ---- movement ----
   if(keys['w'] && player.y>0) player.y-=3;
   if(keys['s'] && player.y<canvas.height-player.size) player.y+=3;
@@ -154,60 +170,83 @@ function gameLoop(){
 
   // ---- firing elements ----
   if(keys['e'] && elementAmmo[selectedElements[0]]>0){
-    bullets.push({x:player.x+player.size/2, y:player.y+player.size/2, dx:5, dy:0, color:selectedElements[0], owner:'player'});
+    fireBullet(selectedElements[0]);
     elementAmmo[selectedElements[0]]-=1;
-    keys['e']=false; // single shot
+    keys['e']=false;
   }
   if(keys['q'] && elementAmmo[selectedElements[1]]>0){
-    bullets.push({x:player.x+player.size/2, y:player.y+player.size/2, dx:5, dy:0, color:selectedElements[1], owner:'player'});
+    fireBullet(selectedElements[1]);
     elementAmmo[selectedElements[1]]-=1;
     keys['q']=false;
   }
-  // special attack (both pressed)
+  // special attack
   if(keys['e'] && keys['q'] && player.special>=100){
-    bullets.push({x:player.x+player.size/2, y:player.y+player.size/2, dx:8, dy:0, color:'purple', owner:'player', special:true});
+    bullets.push({x:player.x+player.size/2, y:player.y+player.size/2, dx:8*Math.cos(player.angle), dy:8*Math.sin(player.angle), color:'purple', owner:'player', special:true});
     player.special=0;
   }
 
-  // ---- AI simple movement ----
-  if(enemy.x>player.x) enemy.x-=1.5; else enemy.x+=1.5;
-  if(enemy.y>player.y) enemy.y-=1.5; else enemy.y+=1.5;
+  // ---- AI movement (random) ----
+  enemy.shootTimer++;
+  if(enemy.shootTimer>60){
+    enemy.shootTimer=0;
+    let angle = Math.random()*Math.PI*2;
+    bullets.push({x:enemy.x+enemy.size/2, y:enemy.y+enemy.size/2, dx:4*Math.cos(angle), dy:4*Math.sin(angle), color:'red', owner:'enemy'});
+  }
+  if(Math.random()<0.02){ enemy.x += (Math.random()>0.5?2:-2); enemy.y += (Math.random()>0.5?2:-2); }
 
   // ---- bullets update ----
   bullets.forEach((b,i)=>{
     b.x += b.dx;
     b.y += b.dy;
-
-    // collision with enemy
-    if(b.owner==='player' &&
-      b.x>enemy.x && b.x<enemy.x+enemy.size &&
-      b.y>enemy.y && b.y<enemy.y+enemy.size){
-        enemy.hp -= b.special?10:3;
-        if(!b.special) player.special+=5;
-        bullets.splice(i,1);
-    }
-
-    // collision with player
+    // collision player
     if(b.owner==='enemy' &&
       b.x>player.x && b.x<player.x+player.size &&
       b.y>player.y && b.y<player.y+player.size){
-        player.hp -= b.special?10:3;
+        player.hp -= b.special?specialDamage:jutsuDamage;
         bullets.splice(i,1);
     }
-
-    // remove bullets out of canvas
-    if(b.x>canvas.width || b.x<0) bullets.splice(i,1);
+    // collision enemy
+    if(b.owner==='player' &&
+      b.x>enemy.x && b.x<enemy.x+enemy.size &&
+      b.y>enemy.y && b.y<enemy.y+enemy.size){
+        enemy.hp -= b.special?specialDamage:jutsuDamage;
+        if(!b.special) player.special +=5;
+        bullets.splice(i,1);
+    }
+    // out of canvas
+    if(b.x<0 || b.x>canvas.width || b.y<0 || b.y>canvas.height) bullets.splice(i,1);
   });
 
-  // ---- rendering ----
+  // ---- chest collision ----
+  chests.forEach((c,i)=>{
+    if(player.x+player.size>c.x && player.x<c.x+c.size && player.y+player.size>c.y && player.y<c.y+c.size){
+      selectedElements.forEach(e=>elementAmmo[e]=6);
+      chests.splice(i,1);
+    }
+  });
+
+  // ---- draw arena ----
   ctx.clearRect(0,0,canvas.width,canvas.height);
-  // player
+
+  // draw chests
+  chests.forEach(c=>{
+    ctx.fillStyle='gold';
+    ctx.fillRect(c.x,c.y,c.size,c.size);
+  });
+
+  // draw player
+  ctx.save();
+  ctx.translate(player.x+player.size/2,player.y+player.size/2);
+  ctx.rotate(player.angle);
   ctx.fillStyle=player.color;
-  ctx.fillRect(player.x,player.y,player.size,player.size);
-  // enemy
+  ctx.fillRect(-player.size/2,-player.size/2,player.size,player.size);
+  ctx.restore();
+
+  // draw enemy
   ctx.fillStyle=enemy.color;
   ctx.fillRect(enemy.x,enemy.y,enemy.size,enemy.size);
-  // bullets
+
+  // draw bullets
   bullets.forEach(b=>{
     ctx.fillStyle=b.color==='Fire'?'orange':b.color==='Water'?'cyan':b.color==='Wind'?'white':b.color==='Earth'?'brown':'purple';
     ctx.beginPath();
@@ -215,34 +254,36 @@ function gameLoop(){
     ctx.fill();
   });
 
-  // ---- update UI ----
-  document.getElementById('playerHP').innerText = `HP: ${player.hp}`;
-  let specialBar = document.getElementById('specialBar');
-  specialBar.innerText = `Special: ${player.special}/100`;
-
-  let ammoText = '';
-  selectedElements.forEach(e=>{
-    ammoText+=`${e}: ${elementAmmo[e]}/6  `;
-  });
-  document.getElementById('elementAmmo').innerText = ammoText;
+  // ---- UI ----
+  document.getElementById('playerHP').innerText=`HP: ${player.hp}`;
+  document.getElementById('specialBar').innerText=`Special: ${player.special}/100`;
+  let ammoText='';
+  selectedElements.forEach(e=> ammoText+=`${e}: ${elementAmmo[e]}/6  `);
+  document.getElementById('elementAmmo').innerText=ammoText;
 
   // ---- check win/lose ----
   if(player.hp<=0 || enemy.hp<=0){
     gameState='end';
     document.getElementById('gameArea').style.display='none';
     document.getElementById('endScreen').style.display='block';
-    document.getElementById('endMessage').innerText = player.hp>0? "You won! You earned 8 trophies":"Better luck next time";
-  } else {
-    requestAnimationFrame(gameLoop);
-  }
+    document.getElementById('endMessage').innerText=player.hp>0?"You won! You earned 8 trophies":"Better luck next time";
+  } else requestAnimationFrame(gameLoop);
+}
+
+// ---------- FIRE BULLET ----------
+function fireBullet(element){
+  let color = element==='Fire'?'orange':element==='Water'?'cyan':element==='Wind'?'white':element==='Earth'?'brown':'yellow';
+  bullets.push({x:player.x+player.size/2, y:player.y+player.size/2, dx:jutsuSpeed*Math.cos(player.angle), dy:jutsuSpeed*Math.sin(player.angle), color:color, owner:'player'});
 }
 
 // ---------- REMATCH ----------
 function rematch(){
   bullets=[];
-  player={ x:50, y:200, size:30, color:'blue', hp:100, special:0 };
-  enemy={ x:520, y:200, size:30, color:'red', hp:100 };
+  chests=[];
+  player={ x:50, y:200, size:30, color:'blue', hp:100, special:0, angle:0 };
+  enemy={ x:620, y:200, size:30, color:'red', hp:100, shootTimer:0 };
   Object.keys(elementAmmo).forEach(e=>elementAmmo[e]=6);
+  spawnChests(5);
   document.getElementById('endScreen').style.display='none';
   document.getElementById('gameArea').style.display='block';
   gameState='playing';
@@ -251,6 +292,8 @@ function rematch(){
 </script>
 </body>
 </html>
+
+
 
 
 
