@@ -18,36 +18,37 @@ body { margin:0; overflow:hidden; background:#111; }
 <p id="special">Special: 0/100</p>
 <p id="score">Score: 0</p>
 </div>
-<div id="info">Click to start | WASD to move | Mouse to look | E/Q to attack | E+Q special</div>
+<div id="info">Click to start | WASD move | Mouse look | E/Q attack | E+Q special</div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/examples/js/controls/PointerLockControls.js"></script>
 
 <script>
-// ---------- SCENE SETUP ----------
+// ---------- SCENE ----------
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x222222);
 
-// CAMERA
+// ---------- CAMERA ----------
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+camera.position.set(0,5,10);
 
-// RENDERER
+// ---------- RENDERER ----------
 const renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-// LIGHTS
-const light = new THREE.DirectionalLight(0xffffff,1);
-light.position.set(5,10,5);
-scene.add(light);
-const ambient = new THREE.AmbientLight(0x404040);
+// ---------- LIGHT ----------
+const ambient = new THREE.AmbientLight(0xffffff,0.6);
 scene.add(ambient);
+const directional = new THREE.DirectionalLight(0xffffff,0.8);
+directional.position.set(10,20,10);
+scene.add(directional);
 
 // ---------- FLOOR ----------
 const floorGeo = new THREE.PlaneGeometry(50,50);
 const floorMat = new THREE.MeshStandardMaterial({color:0x555555});
 const floor = new THREE.Mesh(floorGeo,floorMat);
-floor.rotation.x = -Math.PI/2;
+floor.rotation.x=-Math.PI/2;
 scene.add(floor);
 
 // ---------- PLAYER ----------
@@ -65,10 +66,10 @@ enemy.position.set(5,0.5,0);
 scene.add(enemy);
 
 // ---------- OBSTACLES ----------
-let obstacles = [];
-function generateObstacles(){
+let obstacles=[];
+function createObstacles(){
   const obsData = [
-    {x:10,z:0,w:1,h:5}, {x:-10,z:5,w:1,h:5}, {x:0,z:-10,w:3,h:1}
+    {x:5,z:0,w:1,h:10},{x:-5,z:-5,w:1,h:5},{x:0,z:5,w:3,h:1}
   ];
   obsData.forEach(d=>{
     const geo = new THREE.BoxGeometry(d.w,1,d.h);
@@ -79,91 +80,87 @@ function generateObstacles(){
     obstacles.push(mesh);
   });
 }
-generateObstacles();
+createObstacles();
 
-// ---------- CONTROLS ----------
+// ---------- POINTER LOCK CONTROLS ----------
 const controls = new THREE.PointerLockControls(camera,document.body);
-document.body.addEventListener('click', ()=>{controls.lock();});
-camera.position.set(player.position.x, player.position.y+5, player.position.z+10);
-camera.lookAt(player.position);
+document.body.addEventListener('click',()=>{controls.lock();});
 
 // ---------- INPUT ----------
-let keys = {};
-window.addEventListener('keydown', e=>keys[e.key.toLowerCase()]=true);
-window.addEventListener('keyup', e=>keys[e.key.toLowerCase()]=false);
+let keys={};
+window.addEventListener('keydown',e=>keys[e.key.toLowerCase()]=true);
+window.addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
 
 // ---------- GAME VARIABLES ----------
 let bullets = [];
-let playerHP = 100;
-let playerSpecial = 0;
-let score = 0;
+let playerHP=100;
+let playerSpecial=0;
+let score=0;
 
-// ---------- SPAWN BULLETS ----------
+// ---------- BULLETS ----------
 function shoot(type,special=false){
   const bulletGeo = new THREE.SphereGeometry(special?0.3:0.2,8,8);
-  const color = type==='Fire'?0xffa500:type==='Water'?0x00ffff:0xffff00;
+  const color = type==='Fire'?0xff4500:type==='Water'?0x1e90ff:0xffff00;
   const mat = new THREE.MeshStandardMaterial({color:color});
   const bullet = new THREE.Mesh(bulletGeo,mat);
   bullet.position.set(player.position.x,player.position.y+0.5,player.position.z);
-  const dir = new THREE.Vector3(0,0,-1);
-  dir.applyEuler(player.rotation);
-  bullet.userData = {dir:dir,type:type,owner:'player',special:special};
+  const dir = new THREE.Vector3(0,0,-1).applyEuler(player.rotation);
+  bullet.userData={dir,type,owner:'player',special};
   bullets.push(bullet);
   scene.add(bullet);
 }
 
-// ---------- BULLET HIT CHECK ----------
-function checkHit(b, target){
+// ---------- HIT CHECK ----------
+function hitCheck(b,target){
   const dx=b.position.x-target.position.x;
   const dz=b.position.z-target.position.z;
   return Math.abs(dx)<0.5 && Math.abs(dz)<0.5;
 }
 
-// ---------- ANIMATE ----------
+// ---------- ANIMATE LOOP ----------
 function animate(){
   requestAnimationFrame(animate);
 
   // MOVE PLAYER
-  const speed = 0.1;
+  const speed = 0.15;
   let nx=player.position.x;
   let nz=player.position.z;
   if(keys['w']) nz-=speed;
   if(keys['s']) nz+=speed;
   if(keys['a']) nx-=speed;
   if(keys['d']) nx+=speed;
-  // check obstacles
+  // COLLISION WITH OBSTACLES
   if(!obstacles.some(o=>Math.abs(nx-o.position.x)<0.5 && Math.abs(nz-o.position.z)<0.5)) player.position.x=nx;
   if(!obstacles.some(o=>Math.abs(nx-o.position.x)<0.5 && Math.abs(nz-o.position.z)<0.5)) player.position.z=nz;
 
   // ROTATE PLAYER TOWARD CAMERA
-  const vector = new THREE.Vector3();
-  camera.getWorldDirection(vector);
-  player.rotation.y = Math.atan2(vector.x, vector.z);
+  const v = new THREE.Vector3();
+  camera.getWorldDirection(v);
+  player.rotation.y = Math.atan2(v.x,v.z);
 
-  // ENEMY AI (simple move + shoot toward player)
+  // ENEMY AI MOVE
   const dx = player.position.x - enemy.position.x;
   const dz = player.position.z - enemy.position.z;
   const dist = Math.sqrt(dx*dx + dz*dz);
-  if(dist>1.5){ enemy.position.x += dx/dist*0.05; enemy.position.z += dz/dist*0.05; }
+  if(dist>2){ enemy.position.x += dx/dist*0.08; enemy.position.z += dz/dist*0.08; }
 
-  // Enemy shoot
+  // ENEMY SHOOT
   if(Math.random()<0.01){
     const bulletGeo = new THREE.SphereGeometry(0.2,8,8);
-    const mat = new THREE.MeshStandardMaterial({color:0xff8800});
+    const mat = new THREE.MeshStandardMaterial({color:0xffd700});
     const bullet = new THREE.Mesh(bulletGeo,mat);
     bullet.position.set(enemy.position.x,enemy.position.y+0.5,enemy.position.z);
     const dir = new THREE.Vector3(player.position.x-enemy.position.x,0,player.position.z-enemy.position.z).normalize();
-    bullet.userData = {dir:dir,type:'Fire',owner:'enemy',special:false};
+    bullet.userData={dir,type:'Fire',owner:'enemy',special:false};
     bullets.push(bullet);
     scene.add(bullet);
   }
 
   // UPDATE BULLETS
   bullets.forEach((b,i)=>{
-    b.position.add(b.userData.dir.clone().multiplyScalar(0.2));
-    if(b.userData.owner==='enemy' && checkHit(b,player)){ playerHP -= b.userData.special?10:5; scene.remove(b); bullets.splice(i,1);}
-    if(b.userData.owner==='player' && checkHit(b,enemy)){ scene.remove(b); bullets.splice(i,1); score+=10; }
-    // Remove if out of arena
+    b.position.add(b.userData.dir.clone().multiplyScalar(0.25));
+    if(b.userData.owner==='enemy' && hitCheck(b,player)){playerHP -= b.userData.special?10:5; scene.remove(b); bullets.splice(i,1);}
+    if(b.userData.owner==='player' && hitCheck(b,enemy)){scene.remove(b); bullets.splice(i,1); score+=10;}
     if(Math.abs(b.position.x)>25 || Math.abs(b.position.z)>25){ scene.remove(b); bullets.splice(i,1);}
   });
 
@@ -173,7 +170,7 @@ function animate(){
   camera.position.y = player.position.y + 5;
   camera.lookAt(player.position);
 
-  // UI
+  // UI UPDATE
   document.getElementById('hp').innerText='HP: '+playerHP;
   document.getElementById('special').innerText='Special: '+playerSpecial+'/100';
   document.getElementById('score').innerText='Score: '+score;
@@ -184,8 +181,8 @@ function animate(){
   renderer.render(scene,camera);
 }
 
-// ---------- FIRE INPUT ----------
-window.addEventListener('keydown', e=>{
+// ---------- PLAYER ATTACK INPUT ----------
+window.addEventListener('keydown',e=>{
   if(e.key.toLowerCase()==='e') shoot('Fire');
   if(e.key.toLowerCase()==='q') shoot('Water');
   if(e.key.toLowerCase()==='e' && keys['q']) shoot('Steam',true);
@@ -195,6 +192,8 @@ animate();
 </script>
 </body>
 </html>
+
+
 
 
 
